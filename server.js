@@ -26,7 +26,6 @@ const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
 
 // ── PERSISTENT CACHE ───────────────────────────────────────────
-// Render has a /data disk — use it if available, otherwise use local
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const CACHE_FILE = path.join(DATA_DIR, 'scan_cache.json');
@@ -48,6 +47,9 @@ function saveCache(cache) {
 
 let scanCache = loadCache();
 console.log('Loaded cache with', Object.keys(scanCache).length, 'entries');
+console.log('ENV CHECK — GOOGLE_CLIENT_EMAIL present:', !!process.env.GOOGLE_CLIENT_EMAIL);
+console.log('ENV CHECK — GOOGLE_PRIVATE_KEY present:', !!process.env.GOOGLE_PRIVATE_KEY);
+console.log('ENV CHECK — ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
 
 // ── LIST ALL CLINICIAN FOLDERS ─────────────────────────────────
 app.get('/api/clinicians', async (req, res) => {
@@ -71,7 +73,6 @@ app.get('/api/clinicians', async (req, res) => {
       .map(f => ({
         id: f.id,
         name: f.name,
-        // Include cached data if available so frontend shows results immediately
         cachedData: scanCache[f.id] ? scanCache[f.id].data : null,
         lastScanned: scanCache[f.id] ? scanCache[f.id].scannedAt : null,
       }));
@@ -119,24 +120,35 @@ app.get('/api/check/:folderId', async (req, res) => {
 
 // ── SCAN A SINGLE CLINICIAN ────────────────────────────────────
 app.get('/api/scan/:folderId', async (req, res) => {
-  try {
-    const drive = getDriveClient();
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const { folderId } = req.params;
+  const { folderId } = req.params;
+  console.log('=== SCAN START for folder:', folderId);
 
+  try {
+    console.log('Step 1: Building Drive client...');
+    const drive = getDriveClient();
+
+    console.log('Step 2: Building Anthropic client...');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    console.log('Step 3: Finding HR Docs subfolder...');
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
       fields: 'files(id, name)',
       pageSize: 10,
     });
+    console.log('Subfolders found:', (subRes.data.files || []).map(f => f.name));
+
     const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
     if (!hrFolder) {
+      console.log('No HR Docs folder found — returning empty result');
       const result = { scanned: true, credentials: {}, note: 'No HR Docs folder found' };
       scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
       saveCache(scanCache);
       return res.json(result);
     }
+    console.log('HR Docs folder found:', hrFolder.name, hrFolder.id);
 
+    console.log('Step 4: Listing files in HR Docs folder...');
     let allFiles = [];
     let pageToken = null;
     do {
@@ -149,8 +161,10 @@ app.get('/api/scan/:folderId', async (req, res) => {
       allFiles = allFiles.concat(fileRes.data.files || []);
       pageToken = fileRes.data.nextPageToken;
     } while (pageToken);
+    console.log('Files found:', allFiles.map(f => f.name + ' (' + f.mimeType + ')'));
 
     if (!allFiles.length) {
+      console.log('Empty HR Docs folder');
       const result = { scanned: true, credentials: {}, note: 'Empty folder' };
       scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
       saveCache(scanCache);
@@ -159,14 +173,17 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
+    console.log('Step 5: Downloading file contents...');
     const fileContents = [];
     for (const file of allFiles) {
       if (file.mimeType === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
+        console.log('Skipping HEIC:', file.name);
         fileContents.push('FILE: ' + file.name + ' - HEIC unreadable');
         continue;
       }
       if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
         try {
+          console.log('Downloading:', file.name, file.mimeType);
           const dlRes = await drive.files.get(
             { fileId: file.id, alt: 'media' },
             { responseType: 'arraybuffer' }
@@ -174,10 +191,13 @@ app.get('/api/scan/:folderId', async (req, res) => {
           const b64 = Buffer.from(dlRes.data).toString('base64');
           const mediaType = file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType;
           fileContents.push({ name: file.name, b64, mediaType });
+          console.log('Downloaded OK:', file.name, 'size:', b64.length);
         } catch (e) {
-          fileContents.push('FILE: ' + file.name + ' - download failed');
+          console.error('Download failed for', file.name, ':', e.message);
+          fileContents.push('FILE: ' + file.name + ' - download failed: ' + e.message);
         }
       } else {
+        console.log('Non-readable file type:', file.name, file.mimeType);
         fileContents.push('FILE: ' + file.name + ' (' + file.mimeType + ')');
       }
     }
@@ -187,7 +207,10 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const textFiles = fileContents.filter(f => typeof f === 'string').join('\n');
     if (textFiles) msgContent.push({ type: 'text', text: 'Files:\n' + textFiles + '\n\n' });
 
-    for (const bf of fileContents.filter(f => typeof f === 'object').slice(0, 8)) {
+    const binaryFiles = fileContents.filter(f => typeof f === 'object').slice(0, 8);
+    console.log('Step 6: Sending', binaryFiles.length, 'files to Claude AI...');
+
+    for (const bf of binaryFiles) {
       msgContent.push({
         type: bf.mediaType === 'application/pdf' ? 'document' : 'image',
         source: { type: 'base64', media_type: bf.mediaType, data: bf.b64 }
@@ -200,24 +223,32 @@ app.get('/api/scan/:folderId', async (req, res) => {
       text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. Return ONLY this JSON structure with no markdown:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
+    console.log('Step 7: Calling Anthropic API...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       messages: [{ role: 'user', content: msgContent }],
     });
+    console.log('Claude response received');
 
     const raw = (aiRes.content.find(b => b.type === 'text') || {}).text || '{}';
+    console.log('Raw AI response:', raw.substring(0, 200));
+
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     parsed.scanned = true;
 
-    // Save to persistent cache
     scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
     saveCache(scanCache);
 
+    console.log('=== SCAN COMPLETE for folder:', folderId);
     res.json(parsed);
+
   } catch (err) {
-    console.error('Scan error:', err.message);
+    console.error('=== SCAN FAILED for folder:', folderId);
+    console.error('Error message:', err.message);
+    console.error('Error name:', err.name);
+    console.error('Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
     res.status(500).json({ error: err.message, scanned: true });
   }
 });
