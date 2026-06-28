@@ -4,6 +4,7 @@ const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
@@ -24,8 +25,29 @@ function getDriveClient() {
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
 
-// In-memory cache: { folderId: { scannedAt, driveModifiedAt, data } }
-const scanCache = {};
+// ── PERSISTENT CACHE ───────────────────────────────────────────
+// Render has a /data disk — use it if available, otherwise use local
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const CACHE_FILE = path.join(DATA_DIR, 'scan_cache.json');
+
+function loadCache() {
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    }
+  } catch(e) { console.error('Cache load error:', e.message); }
+  return {};
+}
+
+function saveCache(cache) {
+  try {
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), 'utf8');
+  } catch(e) { console.error('Cache save error:', e.message); }
+}
+
+let scanCache = loadCache();
+console.log('Loaded cache with', Object.keys(scanCache).length, 'entries');
 
 // ── LIST ALL CLINICIAN FOLDERS ─────────────────────────────────
 app.get('/api/clinicians', async (req, res) => {
@@ -46,7 +68,13 @@ app.get('/api/clinicians', async (req, res) => {
 
     const clinicians = allFolders
       .filter(f => !SKIP_KEYWORDS.some(kw => f.name.toLowerCase().includes(kw)))
-      .map(f => ({ id: f.id, name: f.name }));
+      .map(f => ({
+        id: f.id,
+        name: f.name,
+        // Include cached data if available so frontend shows results immediately
+        cachedData: scanCache[f.id] ? scanCache[f.id].data : null,
+        lastScanned: scanCache[f.id] ? scanCache[f.id].scannedAt : null,
+      }));
 
     res.json({ clinicians });
   } catch (err) {
@@ -61,16 +89,14 @@ app.get('/api/check/:folderId', async (req, res) => {
     const drive = getDriveClient();
     const { folderId } = req.params;
 
-    // Find HR Docs subfolder
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
-      fields: 'files(id, name, modifiedTime)',
+      fields: 'files(id, name)',
       pageSize: 10,
     });
     const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
     if (!hrFolder) return res.json({ hasChanges: false, reason: 'no_hr_folder' });
 
-    // Get the most recently modified file in the HR Docs folder
     const fileRes = await drive.files.list({
       q: `'${hrFolder.id}' in parents and trashed = false`,
       fields: 'files(id, modifiedTime)',
@@ -81,18 +107,10 @@ app.get('/api/check/:folderId', async (req, res) => {
     const latestModified = latestFile ? new Date(latestFile.modifiedTime).getTime() : 0;
 
     const cache = scanCache[folderId];
-    if (!cache) {
-      // Never scanned — needs scan
-      return res.json({ hasChanges: true, reason: 'never_scanned', latestModified });
-    }
+    if (!cache) return res.json({ hasChanges: true, reason: 'never_scanned', latestModified });
 
     const hasChanges = latestModified > cache.driveModifiedAt;
-    res.json({
-      hasChanges,
-      reason: hasChanges ? 'new_files' : 'up_to_date',
-      latestModified,
-      lastScanned: cache.scannedAt,
-    });
+    res.json({ hasChanges, reason: hasChanges ? 'new_files' : 'up_to_date', latestModified, lastScanned: cache.scannedAt });
   } catch (err) {
     console.error('Check error:', err.message);
     res.status(500).json({ error: err.message, hasChanges: true });
@@ -106,16 +124,19 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const { folderId } = req.params;
 
-    // Find HR Docs subfolder
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
       fields: 'files(id, name)',
       pageSize: 10,
     });
     const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
-    if (!hrFolder) return res.json({ scanned: true, credentials: {}, note: 'No HR Docs folder found' });
+    if (!hrFolder) {
+      const result = { scanned: true, credentials: {}, note: 'No HR Docs folder found' };
+      scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
+      saveCache(scanCache);
+      return res.json(result);
+    }
 
-    // List all files
     let allFiles = [];
     let pageToken = null;
     do {
@@ -132,13 +153,12 @@ app.get('/api/scan/:folderId', async (req, res) => {
     if (!allFiles.length) {
       const result = { scanned: true, credentials: {}, note: 'Empty folder' };
       scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
+      saveCache(scanCache);
       return res.json(result);
     }
 
-    // Track latest modified time
     const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
-    // Build file contents for AI
     const fileContents = [];
     for (const file of allFiles) {
       if (file.mimeType === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
@@ -191,8 +211,9 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const parsed = JSON.parse(clean);
     parsed.scanned = true;
 
-    // Cache the result with the drive's latest modified timestamp
+    // Save to persistent cache
     scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
+    saveCache(scanCache);
 
     res.json(parsed);
   } catch (err) {
