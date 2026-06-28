@@ -24,6 +24,8 @@ function getDriveClient() {
 
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
+const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB per file max
+const MAX_FILES_TO_SEND = 6; // max files sent to Claude
 
 // ── PERSISTENT CACHE ───────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
@@ -113,10 +115,10 @@ app.get('/api/check/:folderId', async (req, res) => {
   }
 });
 
-// ── SCAN A SINGLE CLINICIAN (memory-efficient) ─────────────────
+// ── SCAN A SINGLE CLINICIAN ────────────────────────────────────
 app.get('/api/scan/:folderId', async (req, res) => {
   const { folderId } = req.params;
-  console.log('=== SCAN START for folder:', folderId);
+  console.log('=== SCAN START:', folderId);
 
   try {
     const drive = getDriveClient();
@@ -137,13 +139,13 @@ app.get('/api/scan/:folderId', async (req, res) => {
       return res.json(result);
     }
 
-    // List files
+    // List files — include size so we can skip oversized ones
     let allFiles = [];
     let pageToken = null;
     do {
       const fileRes = await drive.files.list({
         q: `'${hrFolder.id}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime)',
+        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size)',
         pageSize: 30,
         pageToken: pageToken || undefined,
       });
@@ -160,46 +162,69 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
-    // ── MEMORY-EFFICIENT: download and send files one at a time ──
-    // Only send up to 6 readable files to Claude
-    const readableFiles = allFiles.filter(f =>
+    // Filter to readable file types
+    const candidates = allFiles.filter(f =>
       !f.name.toLowerCase().endsWith('.heic') &&
       f.mimeType !== 'image/heic' &&
       (f.mimeType.startsWith('image/') || f.mimeType === 'application/pdf')
-    ).slice(0, 6);
+    );
 
-    const unreadableNames = allFiles
-      .filter(f => f.name.toLowerCase().endsWith('.heic') || f.mimeType === 'image/heic')
-      .map(f => f.name);
+    const skippedHeic = allFiles.filter(f =>
+      f.name.toLowerCase().endsWith('.heic') || f.mimeType === 'image/heic'
+    ).map(f => f.name);
+
+    const skippedLarge = candidates.filter(f => parseInt(f.size || 0) > MAX_FILE_BYTES).map(f => f.name);
+    const readableFiles = candidates
+      .filter(f => parseInt(f.size || 0) <= MAX_FILE_BYTES)
+      .slice(0, MAX_FILES_TO_SEND);
+
+    console.log('Files:', allFiles.length, '| Readable:', readableFiles.length, '| Skipped large:', skippedLarge.length, '| HEIC:', skippedHeic.length);
 
     const msgContent = [];
 
-    // Add unreadable file notes as text
-    if (unreadableNames.length) {
-      msgContent.push({ type: 'text', text: 'Unreadable HEIC files: ' + unreadableNames.join(', ') + '\n\n' });
+    // Note skipped files as text so Claude knows what's missing
+    const skippedNotes = [
+      ...skippedHeic.map(n => 'HEIC (unreadable): ' + n),
+      ...skippedLarge.map(n => 'TOO LARGE to read: ' + n),
+    ];
+    if (skippedNotes.length) {
+      msgContent.push({ type: 'text', text: 'Note — these files could not be read:\n' + skippedNotes.join('\n') + '\n\n' });
     }
 
-    // Download and add each file one at a time — discard buffer after adding to message
+    // Download each readable file one at a time, free memory immediately
     for (const file of readableFiles) {
       try {
-        console.log('Downloading:', file.name);
+        console.log('Downloading:', file.name, '(', Math.round(parseInt(file.size||0)/1024), 'KB)');
         const dlRes = await drive.files.get(
           { fileId: file.id, alt: 'media' },
           { responseType: 'arraybuffer' }
         );
         const b64 = Buffer.from(dlRes.data).toString('base64');
-        dlRes.data = null; // free memory immediately
+        dlRes.data = null; // free immediately
 
         msgContent.push({
           type: file.mimeType === 'application/pdf' ? 'document' : 'image',
-          source: { type: 'base64', media_type: file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType, data: b64 }
+          source: {
+            type: 'base64',
+            media_type: file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType,
+            data: b64
+          }
         });
         msgContent.push({ type: 'text', text: '(File: ' + file.name + ')\n' });
-        console.log('Added:', file.name, 'size:', b64.length);
+        console.log('Added:', file.name);
       } catch (e) {
         console.error('Download failed:', file.name, e.message);
         msgContent.push({ type: 'text', text: 'FILE: ' + file.name + ' - download failed\n' });
       }
+    }
+
+    // If nothing readable at all, still return a scanned result
+    if (msgContent.length === 0) {
+      console.log('No readable files — returning empty scan');
+      const result = { scanned: true, credentials: {}, note: 'No readable files found' };
+      scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: result };
+      saveCache(scanCache);
+      return res.json(result);
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -208,7 +233,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
       text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. Return ONLY valid JSON, no markdown:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
-    console.log('Calling Anthropic API with', readableFiles.length, 'files...');
+    console.log('Calling Claude with', readableFiles.length, 'files...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
