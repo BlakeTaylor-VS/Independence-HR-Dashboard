@@ -22,10 +22,12 @@ function getDriveClient() {
 }
 
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
-
-// Words that indicate a folder is NOT a clinician
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp'];
 
+// In-memory cache: { folderId: { scannedAt, driveModifiedAt, data } }
+const scanCache = {};
+
+// ── LIST ALL CLINICIAN FOLDERS ─────────────────────────────────
 app.get('/api/clinicians', async (req, res) => {
   try {
     const drive = getDriveClient();
@@ -53,6 +55,51 @@ app.get('/api/clinicians', async (req, res) => {
   }
 });
 
+// ── CHECK IF FOLDER HAS NEW FILES SINCE LAST SCAN ─────────────
+app.get('/api/check/:folderId', async (req, res) => {
+  try {
+    const drive = getDriveClient();
+    const { folderId } = req.params;
+
+    // Find HR Docs subfolder
+    const subRes = await drive.files.list({
+      q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
+      fields: 'files(id, name, modifiedTime)',
+      pageSize: 10,
+    });
+    const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
+    if (!hrFolder) return res.json({ hasChanges: false, reason: 'no_hr_folder' });
+
+    // Get the most recently modified file in the HR Docs folder
+    const fileRes = await drive.files.list({
+      q: `'${hrFolder.id}' in parents and trashed = false`,
+      fields: 'files(id, modifiedTime)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 1,
+    });
+    const latestFile = (fileRes.data.files || [])[0];
+    const latestModified = latestFile ? new Date(latestFile.modifiedTime).getTime() : 0;
+
+    const cache = scanCache[folderId];
+    if (!cache) {
+      // Never scanned — needs scan
+      return res.json({ hasChanges: true, reason: 'never_scanned', latestModified });
+    }
+
+    const hasChanges = latestModified > cache.driveModifiedAt;
+    res.json({
+      hasChanges,
+      reason: hasChanges ? 'new_files' : 'up_to_date',
+      latestModified,
+      lastScanned: cache.scannedAt,
+    });
+  } catch (err) {
+    console.error('Check error:', err.message);
+    res.status(500).json({ error: err.message, hasChanges: true });
+  }
+});
+
+// ── SCAN A SINGLE CLINICIAN ────────────────────────────────────
 app.get('/api/scan/:folderId', async (req, res) => {
   try {
     const drive = getDriveClient();
@@ -74,7 +121,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
     do {
       const fileRes = await drive.files.list({
         q: `'${hrFolder.id}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType)',
+        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime)',
         pageSize: 30,
         pageToken: pageToken || undefined,
       });
@@ -82,7 +129,14 @@ app.get('/api/scan/:folderId', async (req, res) => {
       pageToken = fileRes.data.nextPageToken;
     } while (pageToken);
 
-    if (!allFiles.length) return res.json({ scanned: true, credentials: {}, note: 'Empty folder' });
+    if (!allFiles.length) {
+      const result = { scanned: true, credentials: {}, note: 'Empty folder' };
+      scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
+      return res.json(result);
+    }
+
+    // Track latest modified time
+    const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
     // Build file contents for AI
     const fileContents = [];
@@ -98,7 +152,8 @@ app.get('/api/scan/:folderId', async (req, res) => {
             { responseType: 'arraybuffer' }
           );
           const b64 = Buffer.from(dlRes.data).toString('base64');
-          fileContents.push({ name: file.name, b64, mediaType: file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType });
+          const mediaType = file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType;
+          fileContents.push({ name: file.name, b64, mediaType });
         } catch (e) {
           fileContents.push('FILE: ' + file.name + ' - download failed');
         }
@@ -135,6 +190,10 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     parsed.scanned = true;
+
+    // Cache the result with the drive's latest modified timestamp
+    scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
+
     res.json(parsed);
   } catch (err) {
     console.error('Scan error:', err.message);
