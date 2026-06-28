@@ -226,29 +226,58 @@ async function scanOne(idx){
 async function scanAll(){
   const btn=document.getElementById('scanBtn');
   btn.disabled=true;
-  btn.innerHTML='<span class="spin">⏳</span> Scanning...';
+  btn.innerHTML='<span class="spin">⏳</span> Checking for changes...';
   const wrap=document.getElementById('progWrap');
   wrap.classList.add('show');
 
-  const toScan=clinicians.filter(c=>!c.scanning);
+  // Step 1: check which clinicians have new/changed files in Drive (free)
+  document.getElementById('progLbl').textContent='Checking Google Drive for new uploads...';
+  document.getElementById('progFill').style.width='5%';
+
+  const checkResults = await Promise.all(
+    clinicians.map(async c => {
+      try {
+        const res = await fetch('/api/check/'+c.id);
+        const json = await res.json();
+        return { c, hasChanges: json.hasChanges };
+      } catch(e) {
+        return { c, hasChanges: !c.scanned }; // if check fails, scan if never scanned
+      }
+    })
+  );
+
+  const toScan = checkResults.filter(r => r.hasChanges).map(r => r.c);
+  const skipped = checkResults.filter(r => !r.hasChanges).length;
+
+  if(toScan.length === 0){
+    document.getElementById('progFill').style.width='100%';
+    document.getElementById('progLbl').textContent='✓ All clinicians up to date — no new uploads found';
+    btn.disabled=false;
+    btn.innerHTML='&#8635; Refresh All Credentials';
+    showToast('No changes detected — all credentials current');
+    setTimeout(()=>wrap.classList.remove('show'),4000);
+    return;
+  }
+
+  // Step 2: only scan clinicians with new/changed files (costs API credits)
+  document.getElementById('progLbl').textContent='Found '+toScan.length+' clinician'+(toScan.length!==1?'s':'')+' with new uploads. Scanning... ('+skipped+' skipped — no changes)';
   let done=0;
   const BATCH=5;
 
   for(let i=0;i<toScan.length;i+=BATCH){
     const batch=toScan.slice(i,i+BATCH);
-    const names=batch.map(c=>c.displayName).join(', ');
-    document.getElementById('progLbl').textContent='Scanning '+names+'... ('+done+' of '+toScan.length+' done)';
-    document.getElementById('progFill').style.width=Math.round(done/toScan.length*100)+'%';
+    document.getElementById('progFill').style.width=Math.round((done/toScan.length)*95+5)+'%';
+    document.getElementById('progLbl').textContent='Scanning '+batch.map(c=>c.displayName).join(', ')+'... ('+done+' of '+toScan.length+' done)';
     await Promise.all(batch.map(c=>scanOne(clinicians.indexOf(c))));
     done+=batch.length;
   }
 
   document.getElementById('progFill').style.width='100%';
-  document.getElementById('progLbl').textContent='✓ All '+done+' clinicians scanned';
+  document.getElementById('progLbl').textContent='✓ Scanned '+done+' updated clinician'+(done!==1?'s':'')+' · '+skipped+' unchanged (skipped)';
   btn.disabled=false;
   btn.innerHTML='&#8635; Refresh All Credentials';
-  showToast('Scan complete — '+done+' clinicians updated');
-  setTimeout(()=>wrap.classList.remove('show'),4000);
+  showToast('Done — '+done+' updated, '+skipped+' unchanged');
+  setTimeout(()=>wrap.classList.remove('show'),5000);
 }
 
 function updateKPIs(){
