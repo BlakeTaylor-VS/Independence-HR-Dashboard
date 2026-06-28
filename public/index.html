@@ -427,7 +427,7 @@ async function scanAll() {
 
   btn.innerHTML = '<span class="spin">⏳</span> Scanning ' + toScan.length + '...';
   let done = 0;
-  const BATCH = 3;
+  const BATCH = 1;
   for (let i = 0; i < toScan.length; i += BATCH) {
     const batch = toScan.slice(i, i + BATCH);
     document.getElementById('pFill').style.width = Math.round(done / toScan.length * 100) + '%';
