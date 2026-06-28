@@ -6,394 +6,575 @@
 <title>IHRD — Independence HR Dashboard</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#EEEEF5;color:#1A1D2E;font-size:13px}
-nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24px;position:sticky;top:0;z-index:30}
-.nav-brand{color:#fff;font-weight:800;font-size:13px;letter-spacing:.6px;text-transform:uppercase;margin-right:32px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#EEEEF5;color:#1A1D2E;font-size:13px;min-height:100vh}
+
+/* NAV */
+nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24px;gap:0;position:sticky;top:0;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.nav-brand{color:#fff;font-weight:800;font-size:13px;letter-spacing:.6px;text-transform:uppercase;margin-right:32px;white-space:nowrap}
 .nav-brand span{color:#F0A500}
-.nl{color:rgba(255,255,255,.6);font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:0 14px;height:48px;display:flex;align-items:center;text-decoration:none}
-.nl.active{color:#fff;border-bottom:3px solid #F0A500}
-.nav-right{margin-left:auto}
-.scan-btn{background:#F0A500;color:#1A1D2E;border:none;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer}
-.scan-btn:disabled{opacity:.5;cursor:not-allowed}
-.page-hdr{padding:24px 28px 0}
-.eyebrow{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#3D52D5;margin-bottom:5px}
-.page-title{font-size:28px;font-weight:800}
-.page-sub{font-size:12px;color:#8C90AD;margin-top:3px}
-.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:16px 28px}
-.kpi{background:#fff;border:1px solid #E2E4F0;border-radius:10px;padding:14px 16px}
-.kl{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#8C90AD;margin-bottom:8px}
-.kv{font-size:26px;font-weight:800}
-.kv.navy{color:#2B3FA0}.kv.red{color:#C0392B}.kv.amber{color:#D97706}.kv.blue{color:#3D52D5}.kv.green{color:#16A34A}
-.ks{font-size:10px;color:#8C90AD;margin-top:4px}
-.prog{padding:0 28px 10px;display:none}
-.prog.show{display:block}
-.prog-bar{background:#E2E4F0;border-radius:20px;height:6px;overflow:hidden}
-.prog-fill{background:#3D52D5;height:100%;border-radius:20px;transition:width .3s}
-.prog-lbl{font-size:11px;color:#8C90AD;margin-top:4px}
-.ctrl{padding:0 28px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.srch{flex:1;min-width:200px;padding:8px 13px;border:1.5px solid #E2E4F0;border-radius:8px;background:#fff;font-size:12px;outline:none}
+.nl{color:rgba(255,255,255,.6);font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:0 14px;height:48px;display:flex;align-items:center;cursor:pointer;border-bottom:2px solid transparent;transition:color .15s,border-color .15s}
+.nl:hover{color:#fff}
+.nl.act{color:#fff;border-bottom-color:#F0A500}
+.nav-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+/* PAGE */
+.pg{display:none;padding:20px 24px}
+.pg.on{display:block}
+
+/* HEADER BAR */
+.hbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.hbar h1{font-size:20px;font-weight:800;color:#1A1D2E;letter-spacing:-.3px}
+.hsub{font-size:11px;color:#8C90AD;font-weight:500;margin-left:4px}
+.hbar-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+/* KPI STRIP */
+.kstrip{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
+.kc{background:#fff;border:1px solid #E2E4F0;border-radius:8px;padding:12px 14px}
+.kc .kn{font-size:22px;font-weight:800;line-height:1}
+.kc .kl{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#8C90AD;margin-top:3px}
+.kc.red .kn{color:#C0392B}
+.kc.amber .kn{color:#D97706}
+.kc.blue .kn{color:#3D52D5}
+.kc.green .kn{color:#15803D}
+.kc.gray .kn{color:#8C90AD}
+
+/* FILTER BUTTONS */
+.frow{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.fb{background:#fff;border:1.5px solid #E2E4F0;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;color:#8C90AD;transition:all .15s}
+.fb:hover{border-color:#3D52D5;color:#3D52D5}
+.fb.on{background:#3D52D5;border-color:#3D52D5;color:#fff}
+.fb.red.on{background:#C0392B;border-color:#C0392B;color:#fff}
+.fb.amber.on{background:#D97706;border-color:#D97706;color:#fff}
+.fb.blue.on{background:#3D52D5;border-color:#3D52D5;color:#fff}
+.fb.green.on{background:#15803D;border-color:#15803D;color:#fff}
+
+/* SEARCH */
+.srch-wrap{position:relative;margin-bottom:12px}
+.srch{width:100%;padding:8px 12px;border:1.5px solid #E2E4F0;border-radius:6px;font-size:12px;color:#1A1D2E;background:#fff;outline:none}
 .srch:focus{border-color:#3D52D5}
-.fb{padding:7px 13px;border:1.5px solid #E2E4F0;border-radius:8px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:#6B6F8F}
-.fb.on{background:#3D52D5;color:#fff;border-color:#3D52D5}
-.tw{padding:0 28px 32px}
-.tbl{background:#fff;border:1px solid #E2E4F0;border-radius:12px;overflow:hidden}
-table{width:100%;border-collapse:collapse}
-thead tr{background:#3D52D5}
-th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.7px}
-td{padding:10px 14px;font-size:12px;border-bottom:1px solid #F0F1F8;vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tr.dr:hover td{background:#F7F8FD}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700}
-.bexp{background:#FEE2E2;color:#991B1B}
+
+/* PROGRESS */
+.prog{display:none;margin-bottom:12px}
+.prog.show{display:block}
+.pb{height:6px;background:#E2E4F0;border-radius:3px;overflow:hidden;margin-bottom:4px}
+.pf{height:100%;background:linear-gradient(90deg,#3D52D5,#F0A500);border-radius:3px;width:0;transition:width .3s}
+.pl{font-size:10px;color:#8C90AD;font-weight:600}
+
+/* TABLE */
+.tw{overflow-x:auto}
+.tbl table{width:100%;border-collapse:collapse}
+.tbl th{background:#3D52D5;color:#fff;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;text-align:left;position:sticky;top:48px;z-index:10}
+.tbl td{padding:8px 10px;vertical-align:middle;border-bottom:1px solid #E2E4F0;background:#fff}
+.tbl tr.dr:hover td{background:#F8F8FC}
+.tbl tr.xrow td{background:#F4F5FB;border-bottom:2px solid #E2E4F0;padding:0}
+.rb{background:none;border:none;cursor:pointer;font-size:10px;color:#8C90AD;padding:2px 4px;border-radius:3px}
+.rb:hover{background:#E2E4F0}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.3px}
+.bexp{background:#FEECEC;color:#C0392B}
 .bsoon{background:#FEF3C7;color:#92400E}
-.bok{background:#DCFCE7;color:#14532D}
-.bmiss{background:#EEF0FF;color:#2B3FA0}
-.bpend{background:#F5F3FF;color:#6D28D9}
-.bscn{background:#E0F2FE;color:#0369A1}
-.t1099{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#EEF0FF;color:#2B3FA0}
-.tw2b{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#1A1D2E;color:#fff}
-.xrow td{padding:0;background:#F7F8FD;border-bottom:2px solid #E2E4F0}
-.det{padding:14px 20px}
-.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:7px;margin-top:10px}
-.cc{background:#fff;border:1.5px solid #E2E4F0;border-radius:8px;padding:9px 11px}
-.cn{font-size:9px;font-weight:700;color:#8C90AD;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
-.cd{font-size:11px;font-weight:700}
-.cs{font-size:9px;margin-top:3px;font-weight:600}
-.cc.expired{border-color:#FCA5A5;background:#FFF5F5}.cc.expired .cd{color:#B91C1C}
-.cc.expiring{border-color:#FCD34D;background:#FFFBEB}.cc.expiring .cd{color:#92400E}
-.cc.current{border-color:#86EFAC;background:#F0FDF4}.cc.current .cd{color:#15803D}
-.cc.missing{border:1.5px dashed #A5B4FC;background:#EEF0FF}.cc.missing .cd{color:#2B3FA0}
-.cc.na{opacity:.35}
-.mal{background:#FEE2E2;border:1.5px solid #FCA5A5;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;color:#991B1B;margin-bottom:8px}
-.det-btns{display:flex;gap:8px;margin-top:12px}
-.dbtn{padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #E2E4F0;background:#fff}
-.dbtn.gold{background:#F0A500;color:#1A1D2E;border-color:#F0A500}
-.dbtn.blue{background:#3D52D5;color:#fff;border-color:#3D52D5}
-.rb{background:none;border:none;cursor:pointer;color:#8C90AD;font-size:14px;padding:3px 7px;border-radius:5px}
-.rb:hover{background:#EEF0FF;color:#3D52D5}
+.bok{background:#DCFCE7;color:#15803D}
+.bmiss{background:#EEF1FF;color:#3D52D5}
+.bpend{background:#F1F2F7;color:#8C90AD}
+.bscn{background:#EEF1FF;color:#3D52D5}
+.tw2b{background:#E8EDFF;color:#3D52D5;font-size:9px;font-weight:800;padding:2px 6px;border-radius:3px;letter-spacing:.5px}
+.t1099{background:#FFF5E0;color:#92400E;font-size:9px;font-weight:800;padding:2px 6px;border-radius:3px;letter-spacing:.5px}
+
+/* BUTTONS */
+.dbtn{font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;border:1.5px solid;cursor:pointer;letter-spacing:.3px;transition:all .12s}
+.dbtn.blue{background:#EEF1FF;color:#3D52D5;border-color:#C5CDFA}
+.dbtn.blue:hover{background:#3D52D5;color:#fff}
+.dbtn.gold{background:#FFF5E0;color:#92400E;border-color:#F0D090}
+.dbtn.gold:hover{background:#F0A500;color:#fff;border-color:#F0A500}
+.dbtn{background:#F4F5FB;color:#8C90AD;border-color:#E2E4F0}
+.dbtn:hover{background:#E2E4F0}
+
+/* EXPANDED DETAIL */
+.det{padding:14px 16px}
+.mal{background:#FEF3C7;border:1px solid #F0D090;border-radius:6px;padding:8px 12px;font-size:11px;color:#92400E;font-weight:600;margin-bottom:12px}
+.mal strong{color:#C0392B}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px}
+.cc{border-radius:6px;padding:10px;border:1.5px solid}
+.cc.current{background:#F0FDF4;border-color:#86EFAC}
+.cc.expiring{background:#FFFBEB;border-color:#FCD34D}
+.cc.expired{background:#FEF2F2;border-color:#FCA5A5}
+.cc.missing{background:#EEF1FF;border-color:#C5CDFA}
+.cc.na{background:#F8F9FA;border-color:#E2E4F0;opacity:.6}
+.cn{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8C90AD;margin-bottom:3px}
+.cd{font-size:12px;font-weight:700;color:#1A1D2E}
+.cs{font-size:10px;font-weight:600;margin-top:2px}
+.det-btns{display:flex;gap:8px;flex-wrap:wrap}
+.collect-list{margin-bottom:12px}
+.collect-list .cl-hdr{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#3D52D5;margin-bottom:6px}
+.ci{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;margin-bottom:3px;font-size:11px;font-weight:600}
+.ci.expired{background:#FEECEC;color:#C0392B}
+.ci.expiring{background:#FEF3C7;color:#92400E}
+.ci.missing{background:#EEF1FF;color:#3D52D5}
+.ci .ci-tag{font-size:9px;font-weight:800;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,.06);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px;color:#8C90AD;font-size:12px;font-weight:600}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1A1D2E;color:#fff;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;opacity:0;transition:all .2s;pointer-events:none;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* SPIN */
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.toast{position:fixed;bottom:24px;right:24px;background:#1A1D2E;color:#fff;padding:12px 18px;border-radius:10px;font-size:12px;font-weight:600;z-index:100;opacity:0;transition:opacity .25s;pointer-events:none}
-.toast.show{opacity:1}
-.empty{padding:56px;text-align:center;color:#8C90AD}
+
+/* ACTION QUEUE TAB */
+.aq-hdr{display:grid;grid-template-columns:200px 1fr 100px 120px 90px;gap:0;background:#3D52D5;border-radius:8px 8px 0 0;overflow:hidden}
+.aq-hdr div{padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.8)}
+.aq-row{display:grid;grid-template-columns:200px 1fr 100px 120px 90px;gap:0;border-bottom:1px solid #E2E4F0;background:#fff;align-items:center}
+.aq-row:hover{background:#F8F8FC}
+.aq-row div{padding:8px 12px;font-size:11px}
+.aq-name{font-weight:700;color:#1A1D2E}
+.aq-sub{font-size:10px;color:#8C90AD;font-weight:500}
+.aq-urgency-badge{font-size:9px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.4px;text-transform:uppercase;display:inline-block}
+.aq-wrap{border:1px solid #E2E4F0;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.aq-group{background:#F4F5FB;padding:6px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#3D52D5;border-bottom:1px solid #E2E4F0;border-top:1px solid #E2E4F0}
+.aq-group:first-child{border-top:none}
+.aq-empty{padding:32px;text-align:center;color:#8C90AD;font-size:12px;font-weight:600;background:#fff}
+
+.copy-all-btn{background:#2B3FA0;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.3px}
+.copy-all-btn:hover{background:#1e2d80}
+
+/* SCAN ALL BTN */
+.scan-btn{background:#F0A500;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.3px}
+.scan-btn:disabled{opacity:.5;cursor:not-allowed}
+.scan-btn:hover:not(:disabled){background:#d4900a}
+
+@media(max-width:900px){
+  .kstrip{grid-template-columns:repeat(3,1fr)}
+  .aq-hdr,.aq-row{grid-template-columns:160px 1fr 90px}
+  .aq-hdr div:nth-child(4),.aq-hdr div:nth-child(5),.aq-row div:nth-child(4),.aq-row div:nth-child(5){display:none}
+}
 </style>
 </head>
 <body>
+
 <nav>
-  <div class="nav-brand">INDEPENDENCE <span>HEALTH</span> · HR</div>
-  <a class="nl" href="https://independence-invoice-dashboard.onrender.com" target="_blank">Invoices</a>
-  <div class="nl active">HR Dashboard</div>
-  <div class="nav-right">
-    <button class="scan-btn" id="scanBtn" onclick="scanAll()">&#8635; Refresh All Credentials</button>
+  <div class="nav-brand">INDEPENDENCE <span>IHRD</span></div>
+  <div class="nl act" id="nav-roster" onclick="showTab('roster')">Roster</div>
+  <div class="nl" id="nav-queue" onclick="showTab('queue')">HR Action Queue</div>
+  <div class="nav-r">
+    <button class="scan-btn" id="scanBtn" onclick="scanAll()">&#8635; Refresh All</button>
   </div>
 </nav>
-<div class="page-hdr">
-  <div class="eyebrow">Independence Health Contractors</div>
-  <div class="page-title">HR Credential Dashboard</div>
-  <div class="page-sub" id="pageSub">Loading...</div>
-</div>
-<div class="kpi-row">
-  <div class="kpi"><div class="kl">Total Clinicians</div><div class="kv navy" id="kN">—</div><div class="ks">on roster</div></div>
-  <div class="kpi"><div class="kl">Expired Credentials</div><div class="kv red" id="kE">—</div><div class="ks">need renewal</div></div>
-  <div class="kpi"><div class="kl">Expiring ≤ 30 Days</div><div class="kv amber" id="kS">—</div><div class="ks">coming up</div></div>
-  <div class="kpi"><div class="kl">Missing Credentials</div><div class="kv blue" id="kM">—</div><div class="ks">never uploaded</div></div>
-  <div class="kpi"><div class="kl">Fully Compliant</div><div class="kv green" id="kC">—</div><div class="ks">clinicians</div></div>
-</div>
-<div class="prog" id="prog">
-  <div class="prog-bar"><div class="prog-fill" id="pFill" style="width:0%"></div></div>
-  <div class="prog-lbl" id="pLbl"></div>
-</div>
-<div class="ctrl">
-  <input class="srch" type="text" placeholder="Search clinician..." id="srch" oninput="render()">
-  <button class="fb on" id="f-all" onclick="sf('all')">All</button>
-  <button class="fb" id="f-expired" onclick="sf('expired')">🔴 Expired</button>
-  <button class="fb" id="f-soon" onclick="sf('soon')">⚠️ Expiring</button>
-  <button class="fb" id="f-missing" onclick="sf('missing')">Missing</button>
-  <button class="fb" id="f-ok" onclick="sf('ok')">✅ Compliant</button>
-  <button class="fb" id="f-pending" onclick="sf('pending')">Not Scanned</button>
-</div>
-<div class="tw">
-  <div class="tbl">
-    <table>
-      <thead><tr>
-        <th width="32"></th><th>Clinician</th><th width="60">Type</th>
-        <th>Status</th><th width="44" style="text-align:center">Exp</th>
-        <th width="44" style="text-align:center">≤30d</th><th width="44" style="text-align:center">Miss</th>
-        <th width="90">Worst</th><th width="100">Action</th>
-      </tr></thead>
-      <tbody id="tb"></tbody>
-    </table>
+
+<!-- ═══════════════ ROSTER TAB ═══════════════ -->
+<div class="pg on" id="pg-roster">
+  <div class="hbar">
+    <div>
+      <h1>Clinician Roster</h1>
+      <div class="hsub" id="pageSub">Loading...</div>
+    </div>
   </div>
-  <div class="empty" id="emp" style="display:none">No results.</div>
+
+  <div class="kstrip">
+    <div class="kc red"><div class="kn" id="kE">—</div><div class="kl">Expired</div></div>
+    <div class="kc amber"><div class="kn" id="kS">—</div><div class="kl">Expiring ≤30d</div></div>
+    <div class="kc blue"><div class="kn" id="kM">—</div><div class="kl">Missing</div></div>
+    <div class="kc green"><div class="kn" id="kC">—</div><div class="kl">Compliant</div></div>
+    <div class="kc gray"><div class="kn" id="kN">—</div><div class="kl">Total Clinicians</div></div>
+    <div class="kc gray"><div class="kn" id="kQ">—</div><div class="kl">Items to Collect</div></div>
+  </div>
+
+  <div class="prog" id="prog">
+    <div class="pb"><div class="pf" id="pFill"></div></div>
+    <div class="pl" id="pLbl"></div>
+  </div>
+
+  <div class="srch-wrap">
+    <input class="srch" id="srch" placeholder="Search clinician name..." oninput="render()" />
+  </div>
+
+  <div class="frow">
+    <button class="fb on" id="f-all" onclick="sf('all')">All</button>
+    <button class="fb red" id="f-expired" onclick="sf('expired')">🔴 Expired</button>
+    <button class="fb amber" id="f-soon" onclick="sf('soon')">⚠️ Expiring Soon</button>
+    <button class="fb blue" id="f-missing" onclick="sf('missing')">Missing Docs</button>
+    <button class="fb green" id="f-ok" onclick="sf('ok')">✅ Compliant</button>
+    <button class="fb" id="f-pending" onclick="sf('pending')">Not Scanned</button>
+  </div>
+
+  <div class="tw">
+    <div class="tbl">
+      <table>
+        <thead><tr>
+          <th width="28"></th>
+          <th>Clinician</th>
+          <th width="55">Type</th>
+          <th>Status</th>
+          <th width="44" style="text-align:center" title="Expired credentials">Exp</th>
+          <th width="44" style="text-align:center" title="Expiring within 30 days">≤30d</th>
+          <th width="44" style="text-align:center" title="Missing / never uploaded">Miss</th>
+          <th width="80">Soonest</th>
+          <th width="110">Actions</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emp" style="display:none">No results for current filter.</div>
+  </div>
 </div>
+
+<!-- ═══════════════ ACTION QUEUE TAB ═══════════════ -->
+<div class="pg" id="pg-queue">
+  <div class="hbar">
+    <div>
+      <h1>HR Action Queue</h1>
+      <div class="hsub" id="queueSub">Items your HR assistant needs to collect from clinicians</div>
+    </div>
+    <div class="hbar-r">
+      <button class="copy-all-btn" onclick="copyAllSignals()">📋 Copy All Signals</button>
+    </div>
+  </div>
+
+  <div class="frow">
+    <button class="fb on" id="qf-all" onclick="qsf('all')">All Items</button>
+    <button class="fb red" id="qf-expired" onclick="qsf('expired')">🔴 Expired</button>
+    <button class="fb amber" id="qf-expiring" onclick="qsf('expiring')">⚠️ Expiring Soon</button>
+    <button class="fb blue" id="qf-missing" onclick="qsf('missing')">Missing Docs</button>
+  </div>
+
+  <div id="queueContent">
+    <div class="aq-empty">Scan clinicians to populate the action queue.</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
-// ── STATE ─────────────────────────────────────────────────────
+// ── CONSTANTS ─────────────────────────────────────────────────
 const T = new Date(new Date().toISOString().split('T')[0]);
 const CR = ['Prof License','Driver License','Car Reg','Car Insurance','CPR','Liability Ins','Physical Exam','TB Clearance','Flu Vaccine'];
-let roster = []; // [{id, name, displayName, cred, emp, scanned, scanning, data}]
+let roster = [];
 let expanded = {};
 let af = 'all';
+let qaf = 'all';
+
+// ── NAV ───────────────────────────────────────────────────────
+function showTab(t) {
+  document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.nl').forEach(n => n.classList.remove('act'));
+  document.getElementById('pg-' + t).classList.add('on');
+  document.getElementById('nav-' + t).classList.add('act');
+  if (t === 'queue') renderQueue();
+}
 
 // ── HELPERS ───────────────────────────────────────────────────
-function dy(d){return d?Math.round((new Date(d)-T)/86400000):null}
-function credStatus(v){
-  if(!v)return'missing';
-  if(v.na)return'na';
-  if(v.m||!v.e)return'missing';
-  const n=dy(v.e);
-  if(n<0)return'expired';
-  if(n<=30)return'expiring';
-  return'current';
+function dy(d) { return d ? Math.round((new Date(d) - T) / 86400000) : null; }
+function credStatus(v) {
+  if (!v) return 'missing';
+  if (v.na) return 'na';
+  if (v.m || !v.e) return 'missing';
+  const n = dy(v.e);
+  if (n < 0) return 'expired';
+  if (n <= 30) return 'expiring';
+  return 'current';
 }
-function fmt(d){if(!d)return'—';const p=d.split('-');return p[1]+'/'+p[2]+'/'+p[0].slice(2)}
-function rowStatus(c){
-  if(!c.scanned||!c.data||!c.data.credentials)return'pending';
-  let e=false,s=false,m=false;
-  CR.forEach(k=>{
-    const st=credStatus(c.data.credentials[k]);
-    if(st==='expired')e=true;
-    else if(st==='expiring')s=true;
-    else if(st==='missing')m=true;
+function fmt(d) { if (!d) return '—'; const p = d.split('-'); return p[1] + '/' + p[2] + '/' + p[0].slice(2); }
+function rowStatus(c) {
+  if (!c.scanned || !c.data || !c.data.credentials) return 'pending';
+  let e = false, s = false, m = false;
+  CR.forEach(k => {
+    const st = credStatus(c.data.credentials[k]);
+    if (st === 'expired') e = true;
+    else if (st === 'expiring') s = true;
+    else if (st === 'missing') m = true;
   });
-  if(e)return'expired';if(s)return'expiring';if(m)return'missing';return'ok';
+  if (e) return 'expired'; if (s) return 'expiring'; if (m) return 'missing'; return 'ok';
 }
-function countCreds(c,st){
-  if(!c.data||!c.data.credentials)return 0;
-  return CR.filter(k=>credStatus(c.data.credentials[k])===st).length;
+function countCreds(c, st) {
+  if (!c.data || !c.data.credentials) return 0;
+  return CR.filter(k => credStatus(c.data.credentials[k]) === st).length;
 }
-function worstDays(c){
-  if(!c.data||!c.data.credentials)return null;
-  let w=null;
-  CR.forEach(k=>{
-    const v=c.data.credentials[k];
-    if(v&&v.e){const d=dy(v.e);if(w===null||d<w)w=d;}
+function worstDays(c) {
+  if (!c.data || !c.data.credentials) return null;
+  let w = null;
+  CR.forEach(k => {
+    const v = c.data.credentials[k];
+    if (v && v.e) { const d = dy(v.e); if (w === null || d < w) w = d; }
   });
   return w;
 }
-function parseName(name){
-  const creds=['PT','PTA','OT','COTA','SLP','OTR'];
-  const clean=name.replace(/HR Documents?|Contracts?\/ADP|ADP|Contract/gi,'').replace(/[,·]/g,' ').trim();
-  const parts=clean.split(/\s+/);
-  let nm=[],cred='',emp='';
-  for(const p of parts){
-    if(creds.includes(p.toUpperCase()))cred=p.toUpperCase();
-    else if(p==='W2')emp='W2';
-    else if(p==='1099')emp='1099';
-    else if(p.length>1)nm.push(p);
+function collectItems(c) {
+  if (!c.scanned || !c.data || !c.data.credentials) return [];
+  const items = [];
+  CR.forEach(k => {
+    const v = c.data.credentials[k] || {};
+    const st = credStatus(v);
+    if (st === 'expired' || st === 'expiring' || st === 'missing') {
+      items.push({ cred: k, status: st, exp: v.e, days: v.e ? dy(v.e) : null, note: v.nt || '' });
+    }
+  });
+  return items;
+}
+function parseName(name) {
+  const creds = ['PT', 'PTA', 'OT', 'COTA', 'SLP', 'OTR'];
+  const clean = name.replace(/HR Documents?|Contracts?\/ADP|ADP|Contract/gi, '').replace(/[,·]/g, ' ').trim();
+  const parts = clean.split(/\s+/);
+  let nm = [], cred = '', emp = '';
+  for (const p of parts) {
+    if (creds.includes(p.toUpperCase())) cred = p.toUpperCase();
+    else if (p === 'W2') emp = 'W2';
+    else if (p === '1099') emp = '1099';
+    else if (p.length > 1) nm.push(p);
   }
-  return{displayName:nm.join(' ')||name,cred,emp};
+  return { displayName: nm.join(' ') || name, cred, emp };
 }
-function toast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),3000);
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
-function sf(f){
-  af=f;
-  document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
-  document.getElementById('f-'+f).classList.add('on');
+function sf(f) {
+  af = f;
+  document.querySelectorAll('.frow .fb').forEach(b => b.classList.remove('on'));
+  document.getElementById('f-' + f).classList.add('on');
   render();
+}
+function qsf(f) {
+  qaf = f;
+  document.querySelectorAll('#pg-queue .frow .fb').forEach(b => b.classList.remove('on'));
+  document.getElementById('qf-' + f).classList.add('on');
+  renderQueue();
 }
 
 // ── LOAD ROSTER ───────────────────────────────────────────────
-async function loadRoster(){
-  try{
-    const res=await fetch('/api/clinicians');
-    const json=await res.json();
-    if(json.error)throw new Error(json.error);
-    roster=(json.clinicians||[]).map(f=>{
-      const p=parseName(f.name);
-      const c={id:f.id,folderName:f.name,...p,scanned:false,scanning:false,data:null};
-      if(f.cachedData&&f.cachedData.credentials){
-        c.data=f.cachedData;
-        c.scanned=true;
-        if(f.cachedData.employmentType==='W2')c.emp='W2';
-        else if(f.cachedData.employmentType==='1099')c.emp='1099';
+async function loadRoster() {
+  try {
+    const res = await fetch('/api/clinicians');
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    roster = (json.clinicians || []).map(f => {
+      const p = parseName(f.name);
+      const c = { id: f.id, folderName: f.name, ...p, scanned: false, scanning: false, data: null };
+      if (f.cachedData && f.cachedData.credentials) {
+        c.data = f.cachedData;
+        c.scanned = true;
+        if (f.cachedData.employmentType === 'W2') c.emp = 'W2';
+        else if (f.cachedData.employmentType === '1099') c.emp = '1099';
       }
       return c;
-    }).sort((a,b)=>a.displayName.localeCompare(b.displayName));
-    const sc=roster.filter(c=>c.scanned).length;
-    document.getElementById('kN').textContent=roster.length;
-    document.getElementById('pageSub').textContent=
-      roster.length+' clinicians · '+sc+' scanned · '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    }).sort((a, b) => a.displayName.localeCompare(b.displayName));
+    const sc = roster.filter(c => c.scanned).length;
+    document.getElementById('kN').textContent = roster.length;
+    document.getElementById('pageSub').textContent =
+      roster.length + ' clinicians · ' + sc + ' scanned · ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     updateKPIs();
     render();
-  }catch(e){
-    document.getElementById('pageSub').textContent='Error: '+e.message;
+  } catch (e) {
+    document.getElementById('pageSub').textContent = 'Error loading roster: ' + e.message;
+    console.error(e);
   }
 }
 
 // ── SCAN ONE ──────────────────────────────────────────────────
-async function scanOne(idx){
-  const c=roster[idx];
-  if(!c||c.scanning)return;
-  roster[idx].scanning=true;
-  roster[idx].scanned=false;
+async function scanOne(idx) {
+  const c = roster[idx];
+  if (!c || c.scanning) return;
+  roster[idx].scanning = true;
+  roster[idx].scanned = false;
   render();
-  try{
-    const res=await fetch('/api/scan/'+c.id);
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    if(!data||data.error)throw new Error(data.error||'No data');
-    roster[idx].data=data;
-    roster[idx].scanned=true;
-    roster[idx].scanning=false;
-    if(data.employmentType==='W2')roster[idx].emp='W2';
-    else if(data.employmentType==='1099')roster[idx].emp='1099';
-  }catch(e){
-    roster[idx].scanning=false;
-    roster[idx].scanned=false;
-    toast('Scan error: '+e.message);
-    console.error('Scan error for',c.displayName,e);
+  try {
+    const res = await fetch('/api/scan/' + c.id);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data || data.error) throw new Error(data.error || 'No data returned');
+    roster[idx].data = data;
+    roster[idx].scanned = true;
+    roster[idx].scanning = false;
+    if (data.employmentType === 'W2') roster[idx].emp = 'W2';
+    else if (data.employmentType === '1099') roster[idx].emp = '1099';
+  } catch (e) {
+    roster[idx].scanning = false;
+    roster[idx].scanned = false;
+    toast('Scan error for ' + c.displayName + ': ' + e.message);
+    console.error('Scan error:', e);
   }
   updateKPIs();
   render();
 }
 
 // ── SCAN ALL ──────────────────────────────────────────────────
-async function scanAll(){
-  const btn=document.getElementById('scanBtn');
-  btn.disabled=true;btn.innerHTML='<span class="spin">⏳</span> Checking...';
-  const p=document.getElementById('prog');p.classList.add('show');
+async function scanAll() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin">⏳</span> Checking...';
+  const p = document.getElementById('prog'); p.classList.add('show');
 
-  // Check which have changes
-  const checks=await Promise.all(roster.map(async c=>{
-    try{
-      const r=await fetch('/api/check/'+c.id);
-      const j=await r.json();
-      return{c,hasChanges:j.hasChanges};
-    }catch{return{c,hasChanges:!c.scanned};}
+  const checks = await Promise.all(roster.map(async c => {
+    try {
+      const r = await fetch('/api/check/' + c.id);
+      const j = await r.json();
+      return { c, hasChanges: j.hasChanges };
+    } catch { return { c, hasChanges: !c.scanned }; }
   }));
-  const toScan=checks.filter(x=>x.hasChanges).map(x=>x.c);
-  const skipped=roster.length-toScan.length;
+  const toScan = checks.filter(x => x.hasChanges).map(x => x.c);
+  const skipped = roster.length - toScan.length;
 
-  if(!toScan.length){
-    document.getElementById('pFill').style.width='100%';
-    document.getElementById('pLbl').textContent='✓ No new uploads — all up to date';
-    btn.disabled=false;btn.innerHTML='&#8635; Refresh All Credentials';
-    toast('No changes detected');
-    setTimeout(()=>p.classList.remove('show'),4000);
+  if (!toScan.length) {
+    document.getElementById('pFill').style.width = '100%';
+    document.getElementById('pLbl').textContent = '✓ All credentials current — no new uploads detected';
+    btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
+    toast('No changes detected — ' + skipped + ' clinicians up to date');
+    setTimeout(() => p.classList.remove('show'), 5000);
     return;
   }
 
-  btn.innerHTML='<span class="spin">⏳</span> Scanning '+toScan.length+'...';
-  let done=0;
-  const BATCH=3;
-  for(let i=0;i<toScan.length;i+=BATCH){
-    const batch=toScan.slice(i,i+BATCH);
-    document.getElementById('pFill').style.width=Math.round(done/toScan.length*100)+'%';
-    document.getElementById('pLbl').textContent='Scanning '+batch.map(c=>c.displayName).join(', ')+'... ('+done+'/'+toScan.length+')';
-    await Promise.all(batch.map(c=>scanOne(roster.indexOf(c))));
-    done+=batch.length;
+  btn.innerHTML = '<span class="spin">⏳</span> Scanning ' + toScan.length + '...';
+  let done = 0;
+  const BATCH = 3;
+  for (let i = 0; i < toScan.length; i += BATCH) {
+    const batch = toScan.slice(i, i + BATCH);
+    document.getElementById('pFill').style.width = Math.round(done / toScan.length * 100) + '%';
+    document.getElementById('pLbl').textContent = 'Scanning ' + batch.map(c => c.displayName.split(' ')[0]).join(', ') + '... (' + done + '/' + toScan.length + ')';
+    await Promise.all(batch.map(c => scanOne(roster.indexOf(c))));
+    done += batch.length;
   }
-  document.getElementById('pFill').style.width='100%';
-  document.getElementById('pLbl').textContent='✓ '+done+' scanned · '+skipped+' unchanged';
-  btn.disabled=false;btn.innerHTML='&#8635; Refresh All Credentials';
-  toast('Done — '+done+' updated, '+skipped+' unchanged');
-  setTimeout(()=>p.classList.remove('show'),5000);
+  document.getElementById('pFill').style.width = '100%';
+  document.getElementById('pLbl').textContent = '✓ ' + done + ' scanned · ' + skipped + ' unchanged';
+  btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
+  toast('Done — ' + done + ' updated, ' + skipped + ' unchanged');
+  setTimeout(() => p.classList.remove('show'), 5000);
 }
 
 // ── KPIs ──────────────────────────────────────────────────────
-function updateKPIs(){
-  let e=0,s=0,m=0,ok=0;
-  roster.forEach(c=>{
-    if(!c.scanned||!c.data||!c.data.credentials)return;
-    CR.forEach(k=>{
-      const st=credStatus(c.data.credentials[k]);
-      if(st==='expired')e++;
-      else if(st==='expiring')s++;
-      else if(st==='missing')m++;
+function updateKPIs() {
+  let e = 0, s = 0, m = 0, ok = 0, totalCollect = 0;
+  roster.forEach(c => {
+    if (!c.scanned || !c.data || !c.data.credentials) return;
+    CR.forEach(k => {
+      const st = credStatus(c.data.credentials[k]);
+      if (st === 'expired') e++;
+      else if (st === 'expiring') s++;
+      else if (st === 'missing') m++;
     });
-    if(rowStatus(c)==='ok')ok++;
+    if (rowStatus(c) === 'ok') ok++;
+    totalCollect += collectItems(c).length;
   });
-  document.getElementById('kE').textContent=e||'—';
-  document.getElementById('kS').textContent=s||'—';
-  document.getElementById('kM').textContent=m||'—';
-  document.getElementById('kC').textContent=ok||'—';
+  document.getElementById('kE').textContent = e || '—';
+  document.getElementById('kS').textContent = s || '—';
+  document.getElementById('kM').textContent = m || '—';
+  document.getElementById('kC').textContent = ok || '—';
+  document.getElementById('kQ').textContent = totalCollect || '—';
 }
 
 // ── COPY SIGNAL ───────────────────────────────────────────────
-function copySignal(idx){
-  const c=roster[idx];
-  if(!c.data||!c.data.credentials){toast('No data');return;}
-  const issues=[];
-  CR.forEach(k=>{
-    const v=c.data.credentials[k];
-    const st=credStatus(v);
-    if(st==='expired')issues.push('• '+k+': EXPIRED ('+fmt(v.e)+')');
-    else if(st==='expiring')issues.push('• '+k+': Expiring in '+dy(v.e)+'d ('+fmt(v.e)+')');
-    else if(st==='missing')issues.push('• '+k+': Missing — never uploaded');
+function copySignal(idx) {
+  const c = roster[idx];
+  if (!c.data || !c.data.credentials) { toast('No data — scan first'); return; }
+  const items = collectItems(c);
+  if (!items.length) { toast(c.displayName.split(' ')[0] + ' is fully compliant!'); return; }
+  const lines = items.map(i => {
+    if (i.status === 'expired') return '• ' + i.cred + ': EXPIRED (' + fmt(i.exp) + ') — please re-upload';
+    if (i.status === 'expiring') return '• ' + i.cred + ': Expiring in ' + i.days + ' days (' + fmt(i.exp) + ') — please re-upload';
+    return '• ' + i.cred + ': Not on file — please upload to your HR Drive folder';
   });
-  if(!issues.length){toast('No issues — compliant!');return;}
-  const msg='Hi '+c.displayName.split(' ')[0]+', this is Independence HR. Please update these credentials in your Google Drive folder:\n\n'+issues.join('\n')+'\n\nThank you!';
-  navigator.clipboard.writeText(msg).then(()=>toast('Signal message copied!'));
+  const msg = 'Hi ' + c.displayName.split(' ')[0] + ', this is the Independence HR team. We need the following credentials updated in your Google Drive HR folder:\n\n' + lines.join('\n') + '\n\nPlease upload at your earliest convenience. Thank you!';
+  navigator.clipboard.writeText(msg).then(() => toast('Signal message copied for ' + c.displayName.split(' ')[0]));
 }
 
-// ── RENDER ────────────────────────────────────────────────────
-function render(){
-  const q=document.getElementById('srch').value.toLowerCase();
-  let fd=roster.filter(c=>(c.displayName||c.folderName).toLowerCase().includes(q));
-  if(af==='expired')fd=fd.filter(c=>rowStatus(c)==='expired');
-  else if(af==='soon')fd=fd.filter(c=>rowStatus(c)==='expiring');
-  else if(af==='missing')fd=fd.filter(c=>rowStatus(c)==='missing');
-  else if(af==='ok')fd=fd.filter(c=>rowStatus(c)==='ok');
-  else if(af==='pending')fd=fd.filter(c=>!c.scanned);
+function copyAllSignals() {
+  const scanned = roster.filter(c => c.scanned && collectItems(c).length > 0);
+  if (!scanned.length) { toast('No action items found'); return; }
+  const parts = scanned.map(c => {
+    const items = collectItems(c);
+    const lines = items.map(i => {
+      if (i.status === 'expired') return '  • ' + i.cred + ': EXPIRED (' + fmt(i.exp) + ')';
+      if (i.status === 'expiring') return '  • ' + i.cred + ': Expiring ' + fmt(i.exp) + ' (' + i.days + 'd)';
+      return '  • ' + i.cred + ': Missing — never uploaded';
+    });
+    return c.displayName + ' [' + (c.emp || '?') + ']:\n' + lines.join('\n');
+  });
+  const full = 'IHRD Action Queue — ' + new Date().toLocaleDateString() + '\n' + '='.repeat(40) + '\n\n' + parts.join('\n\n');
+  navigator.clipboard.writeText(full).then(() => toast('Copied ' + scanned.length + ' clinicians to clipboard'));
+}
 
-  const tb=document.getElementById('tb'),em=document.getElementById('emp');
-  if(!fd.length){tb.innerHTML='';em.style.display='block';return;}
-  em.style.display='none';
+// ── RENDER ROSTER ─────────────────────────────────────────────
+function render() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  let fd = roster.filter(c => (c.displayName || c.folderName).toLowerCase().includes(q));
+  if (af === 'expired') fd = fd.filter(c => rowStatus(c) === 'expired');
+  else if (af === 'soon') fd = fd.filter(c => rowStatus(c) === 'expiring');
+  else if (af === 'missing') fd = fd.filter(c => ['missing', 'expired', 'expiring'].includes(rowStatus(c)) && rowStatus(c) !== 'ok');
+  else if (af === 'ok') fd = fd.filter(c => rowStatus(c) === 'ok');
+  else if (af === 'pending') fd = fd.filter(c => !c.scanned);
 
-  tb.innerHTML=fd.map(c=>{
-    const idx=roster.indexOf(c);
-    const rs=rowStatus(c);
-    let badge='';
-    if(c.scanning)badge='<span class="badge bscn"><span class="spin">⏳</span> Scanning...</span>';
-    else if(!c.scanned)badge='<span class="badge bpend">⏳ Not Scanned</span>';
-    else if(rs==='expired')badge='<span class="badge bexp">🔴 Expired</span>';
-    else if(rs==='expiring')badge='<span class="badge bsoon">⚠️ Expiring</span>';
-    else if(rs==='ok')badge='<span class="badge bok">✅ Compliant</span>';
-    else badge='<span class="badge bmiss">Missing Docs</span>';
+  const tb = document.getElementById('tb'), em = document.getElementById('emp');
+  if (!fd.length) { tb.innerHTML = ''; em.style.display = 'block'; return; }
+  em.style.display = 'none';
 
-    const tp=c.emp==='1099'?'<span class="t1099">1099</span>':c.emp==='W2'?'<span class="tw2b">W2</span>':'—';
-    const ec=countCreds(c,'expired'),sc=countCreds(c,'expiring'),mc=countCreds(c,'missing');
-    const w=worstDays(c);
-    const wt=w===null?'—':w<0?Math.abs(w)+'d ago':w+'d';
-    const wc=w!==null&&w<0?'#C0392B':w!==null&&w<=30?'#D97706':'#8C90AD';
-    const action=c.scanned
-      ?`<button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button>`
-      :`<button class="dbtn blue" onclick="scanOne(${idx})" ${c.scanning?'disabled':''}>⚡ Scan</button>`;
+  tb.innerHTML = fd.map(c => {
+    const idx = roster.indexOf(c);
+    const rs = rowStatus(c);
+    let badge = '';
+    if (c.scanning) badge = '<span class="badge bscn"><span class="spin">⏳</span> Scanning...</span>';
+    else if (!c.scanned) badge = '<span class="badge bpend">⏳ Not Scanned</span>';
+    else if (rs === 'expired') badge = '<span class="badge bexp">🔴 Expired</span>';
+    else if (rs === 'expiring') badge = '<span class="badge bsoon">⚠️ Expiring</span>';
+    else if (rs === 'ok') badge = '<span class="badge bok">✅ Compliant</span>';
+    else badge = '<span class="badge bmiss">Missing Docs</span>';
 
-    let rows=`<tr class="dr">
-      <td><button class="rb" onclick="expanded[${idx}]=!expanded[${idx}];render()">${expanded[idx]?'▲':'▼'}</button></td>
-      <td><div style="font-weight:700">${c.displayName}</div><div style="font-size:10px;color:#8C90AD;font-weight:600">${c.cred||''}</div></td>
+    const tp = c.emp === '1099' ? '<span class="t1099">1099</span>' : c.emp === 'W2' ? '<span class="tw2b">W2</span>' : '—';
+    const ec = countCreds(c, 'expired'), sc = countCreds(c, 'expiring'), mc = countCreds(c, 'missing');
+    const w = worstDays(c);
+    const wt = w === null ? '—' : w < 0 ? Math.abs(w) + 'd ago' : w + 'd';
+    const wc = w !== null && w < 0 ? '#C0392B' : w !== null && w <= 30 ? '#D97706' : '#8C90AD';
+    const action = c.scanned
+      ? `<button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button>`
+      : `<button class="dbtn blue" onclick="scanOne(${idx})" ${c.scanning ? 'disabled' : ''}>⚡ Scan</button>`;
+
+    let rows = `<tr class="dr">
+      <td><button class="rb" onclick="expanded[${idx}]=!expanded[${idx}];render()">${expanded[idx] ? '▲' : '▼'}</button></td>
+      <td><div style="font-weight:700">${c.displayName}</div><div style="font-size:10px;color:#8C90AD;font-weight:600">${c.cred || ''}</div></td>
       <td>${tp}</td><td>${badge}</td>
-      <td style="text-align:center;color:${ec?'#E8490A':'#D4D6E8'};font-weight:700">${ec||'—'}</td>
-      <td style="text-align:center;color:${sc?'#D97706':'#D4D6E8'};font-weight:700">${sc||'—'}</td>
-      <td style="text-align:center;color:${mc?'#3D52D5':'#D4D6E8'};font-weight:700">${mc||'—'}</td>
-      <td style="font-size:11px;color:${wc};font-weight:${w!==null&&(w<0||w<=30)?700:400}">${wt}</td>
+      <td style="text-align:center;color:${ec ? '#C0392B' : '#D4D6E8'};font-weight:700">${ec || '—'}</td>
+      <td style="text-align:center;color:${sc ? '#D97706' : '#D4D6E8'};font-weight:700">${sc || '—'}</td>
+      <td style="text-align:center;color:${mc ? '#3D52D5' : '#D4D6E8'};font-weight:700">${mc || '—'}</td>
+      <td style="font-size:11px;color:${wc};font-weight:${w !== null && (w < 0 || w <= 30) ? 700 : 400}">${wt}</td>
       <td>${action}</td>
     </tr>`;
 
-    if(expanded[idx]){
-      if(!c.scanned||!c.data||!c.data.credentials){
-        rows+=`<tr class="xrow"><td colspan="9"><div class="det" style="color:#8C90AD">Not yet scanned. Click ⚡ Scan to load credentials.</div></td></tr>`;
-      }else{
-        const missing=CR.filter(k=>credStatus(c.data.credentials[k])==='missing');
-        rows+=`<tr class="xrow"><td colspan="9"><div class="det">
-          ${missing.length?'<div class="mal">⚠ Never uploaded: '+missing.join(' · ')+'</div>':''}
-          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#3D52D5;margin-bottom:6px">Credential Detail</div>
-          <div class="cgrid">${CR.map(k=>{
-            const v=c.data.credentials[k]||{};
-            const st=credStatus(v);
-            const n=v.e?dy(v.e):null;
-            const dt=v.na?'N/A – W2':v.m?'Not on file':v.e?fmt(v.e):'Unreadable';
-            const sub=v.na?'Not required':st==='missing'?'Never uploaded':st==='expired'?Math.abs(n)+'d ago':st==='expiring'?n+'d left':'Current';
-            const sc2=st==='expired'?'#B91C1C':st==='expiring'?'#92400E':st==='missing'?'#2B3FA0':v.na?'#8C90AD':'#15803D';
-            return`<div class="cc ${v.na?'na':st}"><div class="cn">${k}</div><div class="cd">${dt}</div><div class="cs" style="color:${sc2}">${sub}${v.nt?' · '+v.nt:''}</div></div>`;
+    if (expanded[idx]) {
+      if (!c.scanned || !c.data || !c.data.credentials) {
+        rows += `<tr class="xrow"><td colspan="9"><div class="det" style="color:#8C90AD">Not yet scanned. Click ⚡ Scan to load credential data.</div></td></tr>`;
+      } else {
+        const items = collectItems(c);
+        const missing = CR.filter(k => credStatus(c.data.credentials[k]) === 'missing');
+        const expiredItems = items.filter(i => i.status === 'expired');
+        const expiringItems = items.filter(i => i.status === 'expiring');
+        const missingItems = items.filter(i => i.status === 'missing');
+
+        let collectHtml = '';
+        if (items.length > 0) {
+          const itemHtml = [
+            ...expiredItems.map(i => `<div class="ci expired"><span class="ci-tag">Expired</span>${i.cred} — ${fmt(i.exp)} (${Math.abs(i.days)}d ago)</div>`),
+            ...expiringItems.map(i => `<div class="ci expiring"><span class="ci-tag">Expiring ${i.days}d</span>${i.cred} — ${fmt(i.exp)}</div>`),
+            ...missingItems.map(i => `<div class="ci missing"><span class="ci-tag">Never Uploaded</span>${i.cred}</div>`)
+          ].join('');
+          collectHtml = `<div class="collect-list">
+            <div class="cl-hdr">⚡ Items to Collect from This Clinician (${items.length})</div>
+            ${itemHtml}
+          </div>`;
+        }
+
+        rows += `<tr class="xrow"><td colspan="9"><div class="det">
+          ${collectHtml}
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#3D52D5;margin-bottom:6px;margin-top:${items.length ? 12 : 0}px">All Credentials</div>
+          <div class="cgrid">${CR.map(k => {
+            const v = c.data.credentials[k] || {};
+            const st = credStatus(v);
+            const n = v.e ? dy(v.e) : null;
+            const dt = v.na ? 'N/A — W2' : v.m ? 'Not on file' : v.e ? fmt(v.e) : 'Unreadable';
+            const sub = v.na ? 'Not required' : st === 'missing' ? 'Never uploaded' : st === 'expired' ? Math.abs(n) + 'd ago' : st === 'expiring' ? n + 'd left' : 'Current';
+            const sc2 = st === 'expired' ? '#B91C1C' : st === 'expiring' ? '#92400E' : st === 'missing' ? '#2B3FA0' : v.na ? '#8C90AD' : '#15803D';
+            return `<div class="cc ${v.na ? 'na' : st}"><div class="cn">${k}</div><div class="cd">${dt}</div><div class="cs" style="color:${sc2}">${sub}${v.nt ? ' · ' + v.nt : ''}</div></div>`;
           }).join('')}</div>
-          <div class="det-btns">
+          <div class="det-btns" style="margin-top:10px">
             <button class="dbtn gold" onclick="copySignal(${idx})">📋 Copy Signal Message</button>
             <button class="dbtn" onclick="scanOne(${idx})">🔄 Re-scan</button>
           </div>
@@ -402,6 +583,87 @@ function render(){
     }
     return rows;
   }).join('');
+}
+
+// ── RENDER ACTION QUEUE ───────────────────────────────────────
+function renderQueue() {
+  const container = document.getElementById('queueContent');
+
+  // Build flat list of all action items across all scanned clinicians
+  let allItems = [];
+  roster.forEach(c => {
+    if (!c.scanned) return;
+    const items = collectItems(c);
+    items.forEach(i => allItems.push({ ...i, clinician: c }));
+  });
+
+  // Filter by qaf
+  if (qaf === 'expired') allItems = allItems.filter(i => i.status === 'expired');
+  else if (qaf === 'expiring') allItems = allItems.filter(i => i.status === 'expiring');
+  else if (qaf === 'missing') allItems = allItems.filter(i => i.status === 'missing');
+
+  if (!allItems.length) {
+    const scannedCount = roster.filter(c => c.scanned).length;
+    if (scannedCount === 0) {
+      container.innerHTML = '<div class="aq-empty">No clinicians scanned yet. Go to the Roster tab and click <strong>Refresh All</strong> to scan credentials.</div>';
+    } else {
+      container.innerHTML = '<div class="aq-empty">✅ No action items for this filter — all selected credentials are current.</div>';
+    }
+    document.getElementById('queueSub').textContent = scannedCount + ' clinicians scanned · 0 items to collect';
+    return;
+  }
+
+  document.getElementById('queueSub').textContent =
+    roster.filter(c => c.scanned).length + ' clinicians scanned · ' + allItems.length + ' items to collect';
+
+  // Sort: expired first (most overdue), then expiring (soonest), then missing
+  const order = { expired: 0, expiring: 1, missing: 2 };
+  allItems.sort((a, b) => {
+    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+    if (a.days !== null && b.days !== null) return a.days - b.days;
+    return a.clinician.displayName.localeCompare(b.clinician.displayName);
+  });
+
+  // Group by status
+  const groups = [
+    { key: 'expired', label: '🔴 Expired — Request Immediately', items: allItems.filter(i => i.status === 'expired') },
+    { key: 'expiring', label: '⚠️ Expiring Within 30 Days — Request This Week', items: allItems.filter(i => i.status === 'expiring') },
+    { key: 'missing', label: 'Missing — Never Uploaded', items: allItems.filter(i => i.status === 'missing') },
+  ].filter(g => g.items.length > 0);
+
+  const urgencyColor = { expired: '#C0392B', expiring: '#D97706', missing: '#3D52D5' };
+  const urgencyLabel = { expired: 'Expired', expiring: 'Expiring', missing: 'Missing' };
+  const urgencyBg = { expired: '#FEECEC', expiring: '#FEF3C7', missing: '#EEF1FF' };
+
+  let html = `<div class="aq-wrap">
+    <div class="aq-hdr">
+      <div>Clinician</div>
+      <div>Credential Needed</div>
+      <div>Status</div>
+      <div>Expiry Date</div>
+      <div>Action</div>
+    </div>`;
+
+  groups.forEach(g => {
+    html += `<div class="aq-group">${g.label} (${g.items.length})</div>`;
+    g.items.forEach(i => {
+      const idx = roster.indexOf(i.clinician);
+      const tp = i.clinician.emp === '1099' ? '<span class="t1099">1099</span>' : i.clinician.emp === 'W2' ? '<span class="tw2b">W2</span>' : '';
+      const expText = i.exp
+        ? (i.status === 'expired' ? fmt(i.exp) + ' (' + Math.abs(i.days) + 'd ago)' : fmt(i.exp) + ' (' + i.days + 'd)')
+        : '—';
+      html += `<div class="aq-row">
+        <div><div class="aq-name">${i.clinician.displayName} ${tp}</div><div class="aq-sub">${i.clinician.cred || ''}</div></div>
+        <div style="font-weight:600">${i.cred}${i.note ? ' <span style="color:#8C90AD;font-size:10px;font-weight:500">· ' + i.note + '</span>' : ''}</div>
+        <div><span class="aq-urgency-badge" style="background:${urgencyBg[i.status]};color:${urgencyColor[i.status]}">${urgencyLabel[i.status]}</span></div>
+        <div style="color:${urgencyColor[i.status]};font-weight:${i.status !== 'missing' ? 700 : 400}">${expText}</div>
+        <div><button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button></div>
+      </div>`;
+    });
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 loadRoster();
