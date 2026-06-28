@@ -191,11 +191,24 @@ async function loadRoster(){
     const json=await res.json();
     const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     clinicians=(json.clinicians||[])
-      .map(f=>({id:f.id,folderName:f.name,...parseName(f.name),scanned:false,scanning:false,data:null}))
+      .map(f=>{
+        const parsed=parseName(f.name);
+        const c={id:f.id,folderName:f.name,...parsed,scanned:false,scanning:false,data:null};
+        // Load cached scan data if available
+        if(f.cachedData){
+          c.data=f.cachedData;
+          c.scanned=true;
+          if(f.cachedData.employmentType==='W2')c.emp='W2';
+          else if(f.cachedData.employmentType==='1099')c.emp='1099';
+        }
+        return c;
+      })
       .sort((a,b)=>a.displayName.localeCompare(b.displayName));
     document.getElementById('kTotal').textContent=clinicians.length;
-    document.getElementById('pageSub').textContent=clinicians.length+' clinicians loaded · '+today;
+    const scannedCount=clinicians.filter(c=>c.scanned).length;
+    document.getElementById('pageSub').textContent=clinicians.length+' clinicians loaded · '+scannedCount+' previously scanned · '+today;
     render();
+    updateKPIs();
   }catch(err){
     document.getElementById('pageSub').textContent='Error loading roster: '+err.message;
   }
