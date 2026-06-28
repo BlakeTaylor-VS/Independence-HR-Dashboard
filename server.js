@@ -22,7 +22,7 @@ function getDriveClient() {
 }
 
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
-const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp'];
+const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
 
 // In-memory cache: { folderId: { scannedAt, driveModifiedAt, data } }
 const scanCache = {};
