@@ -209,15 +209,15 @@ async function scanOne(idx){
   try{
     const res=await fetch('/api/scan/'+c.id);
     const data=await res.json();
-    c.data=data;
-    c.scanned=true;
-    c.scanning=false;
-    if(data.employmentType==='W2')c.emp='W2';
-    else if(data.employmentType==='1099')c.emp='1099';
+    clinicians[idx].data=data;
+    clinicians[idx].scanned=true;
+    clinicians[idx].scanning=false;
+    if(data.employmentType==='W2') clinicians[idx].emp='W2';
+    else if(data.employmentType==='1099') clinicians[idx].emp='1099';
   }catch(err){
-    c.scanning=false;
-    c.scanned=true;
-    c.data={error:err.message,credentials:{}};
+    clinicians[idx].scanning=false;
+    clinicians[idx].scanned=true;
+    clinicians[idx].data={error:err.message,credentials:{}};
   }
   render();
   updateKPIs();
