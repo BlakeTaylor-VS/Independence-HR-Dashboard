@@ -23,17 +23,32 @@ function getDriveClient() {
 
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 
+// Words that indicate a folder is NOT a clinician
+const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp'];
+
 app.get('/api/clinicians', async (req, res) => {
   try {
     const drive = getDriveClient();
-    const response = await drive.files.list({
-      q: `mimeType = 'application/vnd.google-apps.folder' and '${MASTER_FOLDER_ID}' in parents and trashed = false`,
-      fields: 'files(id, name)',
-      pageSize: 100,
-    });
-    res.json({ clinicians: (response.data.files || []).map(f => ({ id: f.id, name: f.name })) });
+    let allFolders = [];
+    let pageToken = null;
+    do {
+      const response = await drive.files.list({
+        q: `mimeType = 'application/vnd.google-apps.folder' and '${MASTER_FOLDER_ID}' in parents and trashed = false`,
+        fields: 'nextPageToken, files(id, name)',
+        pageSize: 100,
+        pageToken: pageToken || undefined,
+      });
+      allFolders = allFolders.concat(response.data.files || []);
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
+
+    const clinicians = allFolders
+      .filter(f => !SKIP_KEYWORDS.some(kw => f.name.toLowerCase().includes(kw)))
+      .map(f => ({ id: f.id, name: f.name }));
+
+    res.json({ clinicians });
   } catch (err) {
-    console.error(err);
+    console.error('Clinicians error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -44,14 +59,16 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const { folderId } = req.params;
 
+    // Find HR Docs subfolder
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
       fields: 'files(id, name)',
-      pageSize: 5,
+      pageSize: 10,
     });
     const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
-    if (!hrFolder) return res.json({ credentials: {}, note: 'No HR Docs folder found' });
+    if (!hrFolder) return res.json({ scanned: true, credentials: {}, note: 'No HR Docs folder found' });
 
+    // List all files
     let allFiles = [];
     let pageToken = null;
     do {
@@ -65,12 +82,13 @@ app.get('/api/scan/:folderId', async (req, res) => {
       pageToken = fileRes.data.nextPageToken;
     } while (pageToken);
 
-    if (!allFiles.length) return res.json({ credentials: {}, note: 'Empty folder' });
+    if (!allFiles.length) return res.json({ scanned: true, credentials: {}, note: 'Empty folder' });
 
+    // Build file contents for AI
     const fileContents = [];
     for (const file of allFiles) {
       if (file.mimeType === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-        fileContents.push('FILE: ' + file.name + ' - HEIC format, unreadable');
+        fileContents.push('FILE: ' + file.name + ' - HEIC unreadable');
         continue;
       }
       if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
@@ -80,8 +98,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
             { responseType: 'arraybuffer' }
           );
           const b64 = Buffer.from(dlRes.data).toString('base64');
-          const mediaType = file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType;
-          fileContents.push({ type: 'file', name: file.name, b64, mediaType });
+          fileContents.push({ name: file.name, b64, mediaType: file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType });
         } catch (e) {
           fileContents.push('FILE: ' + file.name + ' - download failed');
         }
@@ -93,35 +110,35 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const msgContent = [];
     const textFiles = fileContents.filter(f => typeof f === 'string').join('\n');
-    if (textFiles) msgContent.push({ type: 'text', text: 'File listing:\n' + textFiles + '\n\n' });
+    if (textFiles) msgContent.push({ type: 'text', text: 'Files:\n' + textFiles + '\n\n' });
 
-    const binaryFiles = fileContents.filter(f => typeof f === 'object');
-    for (const bf of binaryFiles.slice(0, 8)) {
+    for (const bf of fileContents.filter(f => typeof f === 'object').slice(0, 8)) {
       msgContent.push({
         type: bf.mediaType === 'application/pdf' ? 'document' : 'image',
         source: { type: 'base64', media_type: bf.mediaType, data: bf.b64 }
       });
-      msgContent.push({ type: 'text', text: '(Above file: ' + bf.name + ')\n' });
+      msgContent.push({ type: 'text', text: '(File: ' + bf.name + ')\n' });
     }
 
     msgContent.push({
       type: 'text',
-      text: 'Today is ' + today + '. Extract expiration dates for: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Physical Exam expires 1 year from exam date. TB expires 1 year from collection date. Flu expires Oct 1 following year. Liability Ins: na:true if W2. HEIC: unreadable. Return ONLY valid JSON with no markdown: {"employmentType":"W2 or 1099 or unknown","credentials":{"Prof License":{"e":"YYYY-MM-DD or null","m":true,"na":true,"nt":"note"},"Driver License":{"e":null},"Car Reg":{"e":null},"Car Insurance":{"e":null},"CPR":{"e":null},"Liability Ins":{"e":null},"Physical Exam":{"e":null},"TB Clearance":{"e":null},"Flu Vaccine":{"e":null}}}'
+      text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. Return ONLY this JSON structure with no markdown:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
+      max_tokens: 1200,
       messages: [{ role: 'user', content: msgContent }],
     });
 
-    const raw = aiRes.content.find(b => b.type === 'text') ? aiRes.content.find(b => b.type === 'text').text : '{}';
+    const raw = (aiRes.content.find(b => b.type === 'text') || {}).text || '{}';
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
+    parsed.scanned = true;
     res.json(parsed);
   } catch (err) {
-    console.error('Scan error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Scan error:', err.message);
+    res.status(500).json({ error: err.message, scanned: true });
   }
 });
 
