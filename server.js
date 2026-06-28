@@ -32,24 +32,21 @@ const CACHE_FILE = path.join(DATA_DIR, 'scan_cache.json');
 
 function loadCache() {
   try {
-    if (fs.existsSync(CACHE_FILE)) {
-      return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-    }
+    if (fs.existsSync(CACHE_FILE)) return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
   } catch(e) { console.error('Cache load error:', e.message); }
   return {};
 }
 
 function saveCache(cache) {
-  try {
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), 'utf8');
-  } catch(e) { console.error('Cache save error:', e.message); }
+  try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), 'utf8'); }
+  catch(e) { console.error('Cache save error:', e.message); }
 }
 
 let scanCache = loadCache();
 console.log('Loaded cache with', Object.keys(scanCache).length, 'entries');
-console.log('ENV CHECK — GOOGLE_CLIENT_EMAIL present:', !!process.env.GOOGLE_CLIENT_EMAIL);
-console.log('ENV CHECK — GOOGLE_PRIVATE_KEY present:', !!process.env.GOOGLE_PRIVATE_KEY);
-console.log('ENV CHECK — ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
+console.log('ENV CHECK - GOOGLE_CLIENT_EMAIL present:', !!process.env.GOOGLE_CLIENT_EMAIL);
+console.log('ENV CHECK - GOOGLE_PRIVATE_KEY present:', !!process.env.GOOGLE_PRIVATE_KEY);
+console.log('ENV CHECK - ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
 
 // ── LIST ALL CLINICIAN FOLDERS ─────────────────────────────────
 app.get('/api/clinicians', async (req, res) => {
@@ -106,10 +103,8 @@ app.get('/api/check/:folderId', async (req, res) => {
     });
     const latestFile = (fileRes.data.files || [])[0];
     const latestModified = latestFile ? new Date(latestFile.modifiedTime).getTime() : 0;
-
     const cache = scanCache[folderId];
     if (!cache) return res.json({ hasChanges: true, reason: 'never_scanned', latestModified });
-
     const hasChanges = latestModified > cache.driveModifiedAt;
     res.json({ hasChanges, reason: hasChanges ? 'new_files' : 'up_to_date', latestModified, lastScanned: cache.scannedAt });
   } catch (err) {
@@ -118,37 +113,31 @@ app.get('/api/check/:folderId', async (req, res) => {
   }
 });
 
-// ── SCAN A SINGLE CLINICIAN ────────────────────────────────────
+// ── SCAN A SINGLE CLINICIAN (memory-efficient) ─────────────────
 app.get('/api/scan/:folderId', async (req, res) => {
   const { folderId } = req.params;
   console.log('=== SCAN START for folder:', folderId);
 
   try {
-    console.log('Step 1: Building Drive client...');
     const drive = getDriveClient();
-
-    console.log('Step 2: Building Anthropic client...');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    console.log('Step 3: Finding HR Docs subfolder...');
+    // Find HR Docs subfolder
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
       fields: 'files(id, name)',
       pageSize: 10,
     });
-    console.log('Subfolders found:', (subRes.data.files || []).map(f => f.name));
-
     const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
     if (!hrFolder) {
-      console.log('No HR Docs folder found — returning empty result');
+      console.log('No HR Docs folder found');
       const result = { scanned: true, credentials: {}, note: 'No HR Docs folder found' };
       scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
       saveCache(scanCache);
       return res.json(result);
     }
-    console.log('HR Docs folder found:', hrFolder.name, hrFolder.id);
 
-    console.log('Step 4: Listing files in HR Docs folder...');
+    // List files
     let allFiles = [];
     let pageToken = null;
     do {
@@ -161,10 +150,8 @@ app.get('/api/scan/:folderId', async (req, res) => {
       allFiles = allFiles.concat(fileRes.data.files || []);
       pageToken = fileRes.data.nextPageToken;
     } while (pageToken);
-    console.log('Files found:', allFiles.map(f => f.name + ' (' + f.mimeType + ')'));
 
     if (!allFiles.length) {
-      console.log('Empty HR Docs folder');
       const result = { scanned: true, credentials: {}, note: 'Empty folder' };
       scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: 0, data: result };
       saveCache(scanCache);
@@ -173,67 +160,62 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
-    console.log('Step 5: Downloading file contents...');
-    const fileContents = [];
-    for (const file of allFiles) {
-      if (file.mimeType === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-        console.log('Skipping HEIC:', file.name);
-        fileContents.push('FILE: ' + file.name + ' - HEIC unreadable');
-        continue;
-      }
-      if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
-        try {
-          console.log('Downloading:', file.name, file.mimeType);
-          const dlRes = await drive.files.get(
-            { fileId: file.id, alt: 'media' },
-            { responseType: 'arraybuffer' }
-          );
-          const b64 = Buffer.from(dlRes.data).toString('base64');
-          const mediaType = file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType;
-          fileContents.push({ name: file.name, b64, mediaType });
-          console.log('Downloaded OK:', file.name, 'size:', b64.length);
-        } catch (e) {
-          console.error('Download failed for', file.name, ':', e.message);
-          fileContents.push('FILE: ' + file.name + ' - download failed: ' + e.message);
-        }
-      } else {
-        console.log('Non-readable file type:', file.name, file.mimeType);
-        fileContents.push('FILE: ' + file.name + ' (' + file.mimeType + ')');
+    // ── MEMORY-EFFICIENT: download and send files one at a time ──
+    // Only send up to 6 readable files to Claude
+    const readableFiles = allFiles.filter(f =>
+      !f.name.toLowerCase().endsWith('.heic') &&
+      f.mimeType !== 'image/heic' &&
+      (f.mimeType.startsWith('image/') || f.mimeType === 'application/pdf')
+    ).slice(0, 6);
+
+    const unreadableNames = allFiles
+      .filter(f => f.name.toLowerCase().endsWith('.heic') || f.mimeType === 'image/heic')
+      .map(f => f.name);
+
+    const msgContent = [];
+
+    // Add unreadable file notes as text
+    if (unreadableNames.length) {
+      msgContent.push({ type: 'text', text: 'Unreadable HEIC files: ' + unreadableNames.join(', ') + '\n\n' });
+    }
+
+    // Download and add each file one at a time — discard buffer after adding to message
+    for (const file of readableFiles) {
+      try {
+        console.log('Downloading:', file.name);
+        const dlRes = await drive.files.get(
+          { fileId: file.id, alt: 'media' },
+          { responseType: 'arraybuffer' }
+        );
+        const b64 = Buffer.from(dlRes.data).toString('base64');
+        dlRes.data = null; // free memory immediately
+
+        msgContent.push({
+          type: file.mimeType === 'application/pdf' ? 'document' : 'image',
+          source: { type: 'base64', media_type: file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType, data: b64 }
+        });
+        msgContent.push({ type: 'text', text: '(File: ' + file.name + ')\n' });
+        console.log('Added:', file.name, 'size:', b64.length);
+      } catch (e) {
+        console.error('Download failed:', file.name, e.message);
+        msgContent.push({ type: 'text', text: 'FILE: ' + file.name + ' - download failed\n' });
       }
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const msgContent = [];
-    const textFiles = fileContents.filter(f => typeof f === 'string').join('\n');
-    if (textFiles) msgContent.push({ type: 'text', text: 'Files:\n' + textFiles + '\n\n' });
-
-    const binaryFiles = fileContents.filter(f => typeof f === 'object').slice(0, 8);
-    console.log('Step 6: Sending', binaryFiles.length, 'files to Claude AI...');
-
-    for (const bf of binaryFiles) {
-      msgContent.push({
-        type: bf.mediaType === 'application/pdf' ? 'document' : 'image',
-        source: { type: 'base64', media_type: bf.mediaType, data: bf.b64 }
-      });
-      msgContent.push({ type: 'text', text: '(File: ' + bf.name + ')\n' });
-    }
-
     msgContent.push({
       type: 'text',
-      text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. Return ONLY this JSON structure with no markdown:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
+      text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. Return ONLY valid JSON, no markdown:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
-    console.log('Step 7: Calling Anthropic API...');
+    console.log('Calling Anthropic API with', readableFiles.length, 'files...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       messages: [{ role: 'user', content: msgContent }],
     });
-    console.log('Claude response received');
 
     const raw = (aiRes.content.find(b => b.type === 'text') || {}).text || '{}';
-    console.log('Raw AI response:', raw.substring(0, 200));
-
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     parsed.scanned = true;
@@ -241,14 +223,11 @@ app.get('/api/scan/:folderId', async (req, res) => {
     scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
     saveCache(scanCache);
 
-    console.log('=== SCAN COMPLETE for folder:', folderId);
+    console.log('=== SCAN COMPLETE:', folderId);
     res.json(parsed);
 
   } catch (err) {
-    console.error('=== SCAN FAILED for folder:', folderId);
-    console.error('Error message:', err.message);
-    console.error('Error name:', err.name);
-    console.error('Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+    console.error('=== SCAN FAILED:', folderId, err.message);
     res.status(500).json({ error: err.message, scanned: true });
   }
 });
