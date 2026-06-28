@@ -1,4 +1,4 @@
-# Independence HR Dashboard (IHRD)
+# Independence HR Dashboard (IHRD) 
 
 Live credential tracking for Independence Health Contractors clinician roster.
 
