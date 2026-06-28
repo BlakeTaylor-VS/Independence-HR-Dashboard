@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IHRD — Independence HR Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#EEEEF5;color:#1A1D2E;font-size:13px;min-height:100vh}
+
+/* NAV */
+nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24px;gap:0;position:sticky;top:0;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.nav-brand{color:#fff;font-weight:800;font-size:13px;letter-spacing:.6px;text-transform:uppercase;margin-right:32px;white-space:nowrap}
+.nav-brand span{color:#F0A500}
+.nl{color:rgba(255,255,255,.6);font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:0 14px;height:48px;display:flex;align-items:center;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;text-decoration:none}
+.nl:hover{color:#fff}
+.nl.active{color:#fff;border-bottom-color:#F0A500}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.scan-all-btn{background:#F0A500;color:#1A1D2E;border:none;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.3px;display:flex;align-items:center;gap:6px;transition:opacity .15s}
+.scan-all-btn:hover{opacity:.88}
+.scan-all-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* PAGE HEADER */
+.page-header{padding:24px 28px 0}
+.page-eyebrow{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#3D52D5;margin-bottom:5px}
+.page-title{font-size:28px;font-weight:800;color:#1A1D2E;letter-spacing:-.3px}
+.page-sub{font-size:12px;color:#8C90AD;margin-top:3px}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:18px 28px}
+.kpi{background:#fff;border:1px solid #E2E4F0;border-radius:10px;padding:14px 16px}
+.kl{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#8C90AD;margin-bottom:8px}
+.kv{font-size:28px;font-weight:800;line-height:1}
+.kv.navy{color:#2B3FA0}.kv.red{color:#C0392B}.kv.amber{color:#D97706}.kv.blue{color:#3D52D5}.kv.green{color:#16A34A}
+.ks{font-size:10px;color:#8C90AD;margin-top:4px}
+.kbar{height:3px;border-radius:2px;margin-top:10px}
+.kb-navy{background:#2B3FA0}.kb-red{background:#C0392B}.kb-amber{background:#D97706}.kb-blue{background:#3D52D5}.kb-green{background:#16A34A}
+
+/* CONTROLS */
+.ctrl{padding:0 28px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.srch{flex:1;min-width:200px;padding:8px 13px;border:1.5px solid #E2E4F0;border-radius:8px;background:#fff;font-size:12px;color:#1A1D2E;outline:none}
+.srch:focus{border-color:#3D52D5}
+.fb{padding:7px 13px;border:1.5px solid #E2E4F0;border-radius:8px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:#6B6F8F;white-space:nowrap}
+.fb:hover{border-color:#3D52D5;color:#3D52D5}
+.fb.on{background:#3D52D5;color:#fff;border-color:#3D52D5}
+
+/* TABLE */
+.tw{padding:0 28px 32px}
+.tbl-wrap{background:#fff;border:1px solid #E2E4F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(43,63,160,.06)}
+table{width:100%;border-collapse:collapse}
+thead tr{background:#3D52D5}
+th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.7px}
+td{padding:10px 14px;font-size:12px;border-bottom:1px solid #F0F1F8;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.data:hover td{background:#F7F8FD}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700}
+.bexp{background:#FEE2E2;color:#991B1B}
+.bsoon{background:#FEF3C7;color:#92400E}
+.bok{background:#DCFCE7;color:#14532D}
+.bmiss{background:#EEF0FF;color:#2B3FA0}
+.bscan{background:#F5F3FF;color:#6D28D9}
+
+/* TYPE PILL */
+.tpill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
+.t1099{background:#EEF0FF;color:#2B3FA0}
+.tw2b{background:#1A1D2E;color:#fff}
+
+/* DETAIL EXPAND */
+.xrow td{padding:0;background:#F7F8FD;border-bottom:2px solid #E2E4F0}
+.detail{padding:14px 20px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:7px;margin-top:10px}
+.cc{background:#fff;border:1.5px solid #E2E4F0;border-radius:8px;padding:9px 11px}
+.cn{font-size:9px;font-weight:700;color:#8C90AD;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+.cd{font-size:11px;font-weight:700;color:#1A1D2E}
+.cs{font-size:9px;margin-top:3px;font-weight:600}
+.cc.expired{border-color:#FCA5A5;background:#FFF5F5}.cc.expired .cd{color:#B91C1C}
+.cc.expiring{border-color:#FCD34D;background:#FFFBEB}.cc.expiring .cd{color:#92400E}
+.cc.current{border-color:#86EFAC;background:#F0FDF4}.cc.current .cd{color:#15803D}
+.cc.missing{border:1.5px dashed #A5B4FC;background:#EEF0FF}.cc.missing .cd{color:#2B3FA0}
+.cc.na{opacity:.35}
+.mal{background:#FEE2E2;border:1.5px solid #FCA5A5;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;color:#991B1B;margin-bottom:8px}
+.detail-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.da-btn{padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #E2E4F0;background:#fff;color:#1A1D2E;display:flex;align-items:center;gap:5px}
+.da-btn.primary{background:#3D52D5;color:#fff;border-color:#3D52D5}
+.da-btn.gold{background:#F0A500;color:#1A1D2E;border-color:#F0A500}
+.da-btn:hover{opacity:.85}
+.da-btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* SCAN STATES */
+.rb{background:none;border:none;cursor:pointer;color:#8C90AD;font-size:14px;padding:3px 7px;border-radius:5px}
+.rb:hover{background:#EEF0FF;color:#3D52D5}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* PROGRESS BAR */
+.progress-wrap{padding:0 28px 12px;display:none}
+.progress-wrap.show{display:block}
+.progress-bar{background:#E2E4F0;border-radius:20px;height:6px;overflow:hidden}
+.progress-fill{background:#3D52D5;height:100%;border-radius:20px;transition:width .3s}
+.progress-label{font-size:11px;color:#8C90AD;margin-top:4px}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:#1A1D2E;color:#fff;padding:12px 18px;border-radius:10px;font-size:12px;font-weight:600;z-index:100;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+
+.empty{padding:56px;text-align:center;color:#8C90AD}
+.section-lbl{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#3D52D5;margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">INDEPENDENCE <span>HEALTH</span> · HR</div>
+  <a class="nl" href="https://independence-invoice-dashboard.onrender.com" target="_blank">Invoices</a>
+  <div class="nl active">HR Dashboard</div>
+  <div class="nav-right">
+    <button class="scan-all-btn" id="scanAllBtn" onclick="scanAll()">
+      &#8635; Refresh All Credentials
+    </button>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="page-eyebrow">Independence Health Contractors</div>
+  <div class="page-title">HR Credential Dashboard</div>
+  <div class="page-sub" id="pageSub">Loading clinician roster...</div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="kl">Total Clinicians</div><div class="kv navy" id="kTotal">—</div><div class="ks">on roster</div><div class="kbar kb-navy"></div></div>
+  <div class="kpi"><div class="kl">Expired Credentials</div><div class="kv red" id="kExp">—</div><div class="ks">across roster</div><div class="kbar kb-red"></div></div>
+  <div class="kpi"><div class="kl">Expiring ≤ 30 Days</div><div class="kv amber" id="kSoon">—</div><div class="ks">need attention</div><div class="kbar kb-amber"></div></div>
+  <div class="kpi"><div class="kl">Missing Credentials</div><div class="kv blue" id="kMiss">—</div><div class="ks">never uploaded</div><div class="kbar kb-blue"></div></div>
+  <div class="kpi"><div class="kl">Fully Compliant</div><div class="kv green" id="kOk">—</div><div class="ks">clinicians</div><div class="kbar kb-green"></div></div>
+</div>
+
+<div class="progress-wrap" id="progressWrap">
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div class="progress-label" id="progressLabel">Scanning...</div>
+</div>
+
+<div class="ctrl">
+  <input class="srch" type="text" placeholder="Search clinician name..." id="srch" oninput="render()">
+  <button class="fb on" id="f-all" onclick="sf('all')">All</button>
+  <button class="fb" id="f-expired" onclick="sf('expired')">🔴 Expired</button>
+  <button class="fb" id="f-soon" onclick="sf('soon')">⚠️ Expiring ≤30d</button>
+  <button class="fb" id="f-missing" onclick="sf('missing')">Missing Docs</button>
+  <button class="fb" id="f-ok" onclick="sf('ok')">✅ Compliant</button>
+  <button class="fb" id="f-pending" onclick="sf('pending')">⏳ Not Scanned</button>
+</div>
+
+<div class="tw">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th width="32"></th>
+        <th>Clinician</th>
+        <th width="60">Type</th>
+        <th>Status</th>
+        <th width="44" style="text-align:center">Exp</th>
+        <th width="44" style="text-align:center">≤30d</th>
+        <th width="44" style="text-align:center">Miss</th>
+        <th width="90">Worst Exp.</th>
+        <th width="80">Actions</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="emp" style="display:none">No results.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CR = ['Prof License','Driver License','Car Reg','Car Insurance','CPR','Liability Ins','Physical Exam','TB Clearance','Flu Vaccine'];
+const TODAY = new Date().toISOString().split('T')[0];
+const T = new Date(TODAY);
+
+function dy(d){return d?Math.round((new Date(d)-T)/86400000):null}
+function cs(e,m,na){if(na)return'na';if(m||!e)return'missing';const n=dy(e);if(n<0)return'expired';if(n<=30)return'expiring';return'current'}
+function fmt(d){if(!d)return'—';const p=d.split('-');return p[1]+'/'+p[2]+'/'+p[0].slice(2)}
+
+// STATE
+let clinicians = []; // [{id, name, folderName, scanned:false, scanning:false, data:null}]
+let expanded = {};
+let activeFilter = 'all';
+
+// ── PARSE FOLDER NAME ─────────────────────────────────────────
+function parseName(folderName) {
+  // "First Last PT W2" or "First Last, PT HR Documents" etc.
+  const clean = folderName.replace(/HR Documents?|Contracts?\/ADP|ADP|Contract/gi, '').replace(/[,·]/g, ' ').trim();
+  const parts = clean.split(/\s+/);
+  const credTypes = ['PT','PTA','OT','COTA','SLP','OTR'];
+  const empTypes = ['W2','1099'];
+  let name = [], cred = '', emp = '';
+  for (const p of parts) {
+    if (credTypes.includes(p.toUpperCase())) { cred = p.toUpperCase(); }
+    else if (empTypes.includes(p.toUpperCase())) { emp = p.toUpperCase(); }
+    else if (p.length > 1) name.push(p);
+  }
+  return { displayName: name.join(' ') || folderName, cred, emp };
+}
+
+function cget(c,k){return c&&c.credentials&&c.credentials[k]?c.credentials[k]:{}}
+function cst(data,k){const v=cget(data,k);return cs(v.e,v.m,v.na)}
+
+function rstat(c) {
+  if (!c.scanned) return 'pending';
+  if (!c.data || !c.data.credentials) return 'pending';
+  let e=false,so=false,mi=false;
+  CR.forEach(k=>{const s=cst(c.data,k);if(s==='expired')e=true;else if(s==='expiring')so=true;else if(s==='missing')mi=true;});
+  if(e)return'expired';if(so)return'expiring';if(mi)return'missing';return'ok';
+}
+function cnt(c,st){if(!c.data?.credentials)return 0;return CR.filter(k=>cst(c.data,k)===st).length}
+function wdy(c){if(!c.data?.credentials)return null;let w=null;CR.forEach(k=>{const v=cget(c.data,k);if(v.e){const d=dy(v.e);if(w===null||d<w)w=d;}});return w}
+
+// ── LOAD ROSTER ───────────────────────────────────────────────
+async function loadRoster() {
+  try {
+    const res = await fetch('/api/clinicians');
+    const json = await res.json();
+    clinicians = (json.clinicians || [])
+      .filter(f => !f.name.toLowerCase().includes('contract') && !f.name.toLowerCase().includes('adp'))
+      .map(f => {
+        const parsed = parseName(f.name);
+        return { id: f.id, folderName: f.name, ...parsed, scanned: false, scanning: false, data: null };
+      })
+      .sort((a,b) => a.displayName.localeCompare(b.displayName));
+
+    document.getElementById('pageSub').textContent =
+      `${clinicians.length} clinicians loaded · ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+    document.getElementById('kTotal').textContent = clinicians.length;
+    render();
+  } catch(err) {
+    document.getElementById('pageSub').textContent = 'Failed to load roster — check server connection';
+    console.error(err);
+  }
+}
+
+// ── SCAN ONE ──────────────────────────────────────────────────
+async function scanOne(idx) {
+  const c = clinicians[idx];
+  if (!c || c.scanning) return;
+  c.scanning = true;
+  render();
+  try {
+    const res = await fetch(`/api/scan/${c.id}`);
+    const data = await res.json();
+    c.data = data;
+    c.scanned = true;
+    c.scanning = false;
+
+    // auto-detect employment type from AI response
+    if (data.employmentType === 'W2') c.emp = 'W2';
+    else if (data.employmentType === '1099') c.emp = '1099';
+  } catch(err) {
+    c.scanning = false;
+    c.data = { error: err.message };
+  }
+  render();
+  updateKPIs();
+}
+
+// ── SCAN ALL ──────────────────────────────────────────────────
+async function scanAll() {
+  const btn = document.getElementById('scanAllBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⏳</span> Scanning...';
+
+  const wrap = document.getElementById('progressWrap');
+  wrap.classList.add('show');
+
+  const toScan = clinicians.filter(c => !c.scanning);
+  let done = 0;
+
+  for (const c of toScan) {
+    const idx = clinicians.indexOf(c);
+    document.getElementById('progressLabel').textContent =
+      `Scanning ${c.displayName || c.folderName} (${done+1} of ${toScan.length})...`;
+    document.getElementById('progressFill').style.width = `${Math.round(done/toScan.length*100)}%`;
+    await scanOne(idx);
+    done++;
+  }
+
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressLabel').textContent = `✓ All ${done} clinicians scanned`;
+  btn.disabled = false;
+  btn.innerHTML = '&#8635; Refresh All Credentials';
+  showToast(`Scan complete — ${done} clinicians updated`);
+  setTimeout(() => wrap.classList.remove('show'), 4000);
+}
+
+// ── KPI UPDATE ────────────────────────────────────────────────
+function updateKPIs() {
+  let te=0,ts=0,tm=0,tc=0;
+  clinicians.forEach(c=>{
+    if(!c.scanned||!c.data?.credentials)return;
+    CR.forEach(k=>{const s=cst(c.data,k);if(s==='expired')te++;else if(s==='expiring')ts++;else if(s==='missing')tm++;});
+    if(rstat(c)==='ok')tc++;
+  });
+  document.getElementById('kExp').textContent = te || '—';
+  document.getElementById('kSoon').textContent = ts || '—';
+  document.getElementById('kMiss').textContent = tm || '—';
+  document.getElementById('kOk').textContent = tc || '—';
+}
+
+// ── COPY SIGNAL MESSAGE ───────────────────────────────────────
+function copySignalMsg(idx) {
+  const c = clinicians[idx];
+  if (!c.data?.credentials) return;
+  const issues = [];
+  CR.forEach(k => {
+    const v = cget(c.data, k);
+    const st = cst(c.data, k);
+    if (st === 'expired') issues.push(`• ${k}: EXPIRED (${fmt(v.e)})`);
+    else if (st === 'expiring') issues.push(`• ${k}: Expiring in ${dy(v.e)} days (${fmt(v.e)})`);
+    else if (st === 'missing') issues.push(`• ${k}: Missing — never uploaded`);
+  });
+  if (!issues.length) { showToast('No issues to report!'); return; }
+  const msg = `Hi ${c.displayName.split(' ')[0]}, this is Independence HR. Please update the following credentials in your Google Drive folder as soon as possible:\n\n${issues.join('\n')}\n\nThank you!`;
+  navigator.clipboard.writeText(msg).then(() => showToast('Signal message copied to clipboard!'));
+}
+
+// ── TOAST ─────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── FILTER ────────────────────────────────────────────────────
+function sf(f) {
+  activeFilter = f;
+  document.querySelectorAll('.fb').forEach(b => b.classList.remove('on'));
+  document.getElementById('f-'+f).classList.add('on');
+  render();
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function render() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  let fd = clinicians.filter(c => (c.displayName||c.folderName).toLowerCase().includes(q));
+  if (activeFilter==='expired') fd=fd.filter(c=>rstat(c)==='expired');
+  else if (activeFilter==='soon') fd=fd.filter(c=>rstat(c)==='expiring');
+  else if (activeFilter==='missing') fd=fd.filter(c=>rstat(c)==='missing');
+  else if (activeFilter==='ok') fd=fd.filter(c=>rstat(c)==='ok');
+  else if (activeFilter==='pending') fd=fd.filter(c=>!c.scanned);
+
+  updateKPIs();
+
+  const tb = document.getElementById('tb');
+  const em = document.getElementById('emp');
+  if (!fd.length) { tb.innerHTML=''; em.style.display='block'; return; }
+  em.style.display='none';
+
+  tb.innerHTML = fd.map(c => {
+    const idx = clinicians.indexOf(c);
+    const r = rstat(c);
+    const sb = c.scanning
+      ? '<span class="badge bscan"><span class="spin">⏳</span> Scanning...</span>'
+      : r==='expired'?'<span class="badge bexp">🔴 Expired</span>'
+      : r==='expiring'?'<span class="badge bsoon">⚠️ Expiring</span>'
+      : r==='ok'?'<span class="badge bok">✅ Compliant</span>'
+      : r==='missing'?'<span class="badge bmiss">Missing Docs</span>'
+      : '<span class="badge" style="background:#F5F3FF;color:#6D28D9">⏳ Not Scanned</span>';
+
+    const is1099 = c.emp==='1099';
+    const typePill = c.emp
+      ? (is1099?'<span class="tpill t1099">1099</span>':'<span class="tpill tw2b">W2</span>')
+      : '<span style="color:#8C90AD;font-size:10px">—</span>';
+
+    const ec=cnt(c,'expired'), soc=cnt(c,'expiring'), mc=cnt(c,'missing');
+    const w=wdy(c);
+    const wt=w===null?'—':w<0?Math.abs(w)+'d ago':w+'d';
+    const wc=w!==null&&w<0?'#C0392B':w!==null&&w<=30?'#D97706':'#8C90AD';
+    const cred=c.cred||(c.folderName.match(/\b(PT|PTA|OT|COTA|SLP|OTR)\b/)||[''])[0];
+
+    let rows = `<tr class="data">
+      <td><button class="rb" onclick="expanded[${idx}]=!expanded[${idx}];render()">${expanded[idx]?'▲':'▼'}</button></td>
+      <td>
+        <div style="font-weight:700">${c.displayName||c.folderName}</div>
+        <div style="font-size:10px;color:#8C90AD;font-weight:600;margin-top:1px">${cred}</div>
+      </td>
+      <td>${typePill}</td>
+      <td>${sb}</td>
+      <td style="text-align:center;color:${ec?'#E8490A':'#D4D6E8'};font-weight:700">${ec||'—'}</td>
+      <td style="text-align:center;color:${soc?'#D97706':'#D4D6E8'};font-weight:700">${soc||'—'}</td>
+      <td style="text-align:center;color:${mc?'#3D52D5':'#D4D6E8'};font-weight:700">${mc||'—'}</td>
+      <td style="font-size:11px;color:${wc};font-weight:${(w!==null&&(w<0||w<=30))?700:400}">${wt}</td>
+      <td>
+        ${c.scanned
+          ? `<button class="da-btn gold" onclick="copySignalMsg(${idx})" title="Copy Signal message">📋 Signal</button>`
+          : `<button class="da-btn primary" onclick="scanOne(${idx})" ${c.scanning?'disabled':''}>⚡ Scan</button>`
+        }
+      </td>
+    </tr>`;
+
+    if (expanded[idx]) {
+      if (!c.scanned || !c.data?.credentials) {
+        rows += `<tr class="xrow"><td colspan="9"><div class="detail">
+          ${c.data?.error
+            ? `<div class="mal">⚠ Scan error: ${c.data.error}</div>`
+            : `<div style="color:#8C90AD;font-size:12px">⏳ Not yet scanned — click ⚡ Scan to load credentials</div>`
+          }
+          <div class="detail-actions">
+            <button class="da-btn primary" onclick="scanOne(${idx})" ${c.scanning?'disabled':''}>⚡ Scan Now</button>
+          </div>
+        </div></td></tr>`;
+      } else {
+        const mc2 = CR.filter(k=>cst(c.data,k)==='missing');
+        rows += `<tr class="xrow"><td colspan="9"><div class="detail">
+          ${mc2.length?`<div class="mal">⚠ Never uploaded: ${mc2.join(' · ')}</div>`:''}
+          <div class="section-lbl">Credential Detail</div>
+          <div class="cgrid">${CR.map(k=>{
+            const v=cget(c.data,k); const st=cst(c.data,k);
+            const n2=v.e?dy(v.e):null;
+            const dt=v.na?'N/A – W2':v.m?'Not on file':v.e?fmt(v.e):'Unreadable';
+            const sub=v.na?'Not required':st==='missing'?'Never uploaded':st==='expired'?Math.abs(n2)+'d ago':st==='expiring'?n2+'d left':'Current';
+            const sc=st==='expired'?'#B91C1C':st==='expiring'?'#92400E':st==='missing'?'#2B3FA0':v.na?'#8C90AD':'#15803D';
+            return`<div class="cc ${v.na?'na':st}">
+              <div class="cn">${k}</div>
+              <div class="cd">${dt}</div>
+              <div class="cs" style="color:${sc}">${sub}${v.nt?' · '+v.nt:''}</div>
+            </div>`;
+          }).join('')}</div>
+          <div class="detail-actions">
+            <button class="da-btn gold" onclick="copySignalMsg(${idx})">📋 Copy Signal Message</button>
+            <button class="da-btn" onclick="scanOne(${idx})">🔄 Re-scan</button>
+          </div>
+        </div></td></tr>`;
+      }
+    }
+    return rows;
+  }).join('');
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+loadRoster();
+</script>
+</body>
+</html>
