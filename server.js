@@ -230,19 +230,36 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     msgContent.push({
       type: 'text',
-      text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. Return ONLY valid JSON, no markdown:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
+      text: 'Today: ' + today + '. Find expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine. Rules: Physical Exam expires 1yr from exam date. TB expires 1yr from test date. Flu expires Oct 1 next year. W2 employees: Liability Ins is N/A. CRITICAL: Respond with ONLY the raw JSON object below, filled in. Do NOT include any explanation, preamble, commentary, or markdown code fences. Your entire response must start with { and end with }. Nothing else.\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
     console.log('Calling Claude with', readableFiles.length, 'files...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
+      system: 'You are a JSON-only API. You must respond with ONLY a valid JSON object - no explanations, no preamble, no markdown fences, no commentary before or after. If you need to note something, put it in the "nt" field of the relevant credential, not in surrounding text.',
       messages: [{ role: 'user', content: msgContent }],
     });
 
     const raw = (aiRes.content.find(b => b.type === 'text') || {}).text || '{}';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    console.log('Raw AI response (first 300 chars):', raw.substring(0, 300));
+
+    // Extract JSON object even if surrounded by commentary
+    let clean = raw.replace(/```json|```/g, '').trim();
+    const firstBrace = clean.indexOf('{');
+    const lastBrace = clean.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
+      throw new Error('No JSON object found in AI response: ' + raw.substring(0, 200));
+    }
+    clean = clean.substring(firstBrace, lastBrace + 1);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('JSON parse failed on extracted text:', clean.substring(0, 300));
+      throw new Error('AI response was not valid JSON even after extraction: ' + parseErr.message);
+    }
     parsed.scanned = true;
 
     scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
