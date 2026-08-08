@@ -6,6 +6,7 @@
 <title>IHRD — Independence HR Dashboard</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+html{scroll-padding-top:96px}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#EEEEF5;color:#1A1D2E;font-size:13px;min-height:100vh}
 
 /* NAV */
@@ -64,6 +65,8 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
 .tw{overflow-x:auto}
 .tbl table{width:100%;border-collapse:collapse}
 .tbl th{background:#3D52D5;color:#fff;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;text-align:left;position:sticky;top:48px;z-index:10}
+.tw{overflow-x:auto;border-radius:8px;border:1px solid #E2E4F0}
+.tbl table{width:100%;border-collapse:collapse;margin-top:0}
 .tbl td{padding:8px 10px;vertical-align:middle;border-bottom:1px solid #E2E4F0;background:#fff}
 .tbl tr.dr:hover td{background:#F8F8FC}
 .tbl tr.xrow td{background:#F4F5FB;border-bottom:2px solid #E2E4F0;padding:0}
@@ -464,6 +467,16 @@ function updateKPIs() {
 }
 
 // ── COPY SIGNAL ───────────────────────────────────────────────
+function openDriveFolder(idx) {
+  const c = roster[idx];
+  const url = 'https://drive.google.com/drive/folders/' + c.id;
+  window.open(url, '_blank');
+}
+function copyDriveLink(idx) {
+  const c = roster[idx];
+  const url = 'https://drive.google.com/drive/folders/' + c.id;
+  navigator.clipboard.writeText(url).then(() => toast('Drive folder link copied for ' + c.displayName.split(' ')[0]));
+}
 function copySignal(idx) {
   const c = roster[idx];
   if (!c.data || !c.data.credentials) { toast('No data — scan first'); return; }
@@ -525,7 +538,7 @@ function render() {
     const wt = w === null ? '—' : w < 0 ? Math.abs(w) + 'd ago' : w + 'd';
     const wc = w !== null && w < 0 ? '#C0392B' : w !== null && w <= 30 ? '#D97706' : '#8C90AD';
     const action = c.scanned
-      ? `<button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button>`
+      ? `<div style="display:flex;gap:5px"><button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button><button class="dbtn blue" onclick="copyDriveLink(${idx})" title="Copy HR folder link">📁</button></div>`
       : `<button class="dbtn blue" onclick="scanOne(${idx})" ${c.scanning ? 'disabled' : ''}>⚡ Scan</button>`;
 
     let rows = `<tr class="dr">
@@ -576,6 +589,8 @@ function render() {
           }).join('')}</div>
           <div class="det-btns" style="margin-top:10px">
             <button class="dbtn gold" onclick="copySignal(${idx})">📋 Copy Signal Message</button>
+            <button class="dbtn blue" onclick="openDriveFolder(${idx})">📁 Open HR Folder</button>
+            <button class="dbtn blue" onclick="copyDriveLink(${idx})">🔗 Copy Folder Link</button>
             <button class="dbtn" onclick="scanOne(${idx})">🔄 Re-scan</button>
           </div>
         </div></td></tr>`;
@@ -657,7 +672,10 @@ function renderQueue() {
         <div style="font-weight:600">${i.cred}${i.note ? ' <span style="color:#8C90AD;font-size:10px;font-weight:500">· ' + i.note + '</span>' : ''}</div>
         <div><span class="aq-urgency-badge" style="background:${urgencyBg[i.status]};color:${urgencyColor[i.status]}">${urgencyLabel[i.status]}</span></div>
         <div style="color:${urgencyColor[i.status]};font-weight:${i.status !== 'missing' ? 700 : 400}">${expText}</div>
-        <div><button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button></div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button>
+          <button class="dbtn blue" onclick="copyDriveLink(${idx})">🔗 Folder</button>
+        </div>
       </div>`;
     });
   });
