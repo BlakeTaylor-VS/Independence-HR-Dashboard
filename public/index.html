@@ -437,10 +437,8 @@ async function loadRoster() {
 async function scanOne(idx) {
   const c = roster[idx];
   if (!c || c.scanning) return;
-  const oldData = c.data ? JSON.parse(JSON.stringify(c.data)) : null;
   roster[idx].scanning = true;
   roster[idx].scanned = false;
-  render();
   try {
     const res = await fetch('/api/scan/' + c.id);
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -451,23 +449,12 @@ async function scanOne(idx) {
     roster[idx].scanning = false;
     if (data.employmentType === 'W2') roster[idx].emp = 'W2';
     else if (data.employmentType === '1099') roster[idx].emp = '1099';
-    // Log the scan and detect credential changes
-    const items = collectItems(roster[idx]);
-    if (items.length === 0) {
-      logAction('Scanned: ' + c.displayName + ' — All credentials current ✅', 'good', 'Compliant');
-    } else {
-      logAction('Scanned: ' + c.displayName + ' — ' + items.length + ' item(s) need attention', 'info', items.length + ' items');
-    }
-    detectChanges(roster[idx], oldData, data);
   } catch (e) {
     roster[idx].scanning = false;
     roster[idx].scanned = false;
-    logAction('Scan error: ' + c.displayName + ' — ' + e.message, 'bad', 'Error');
-    toast('Scan error for ' + c.displayName + ': ' + e.message);
-    console.error('Scan error:', e);
+    console.error('Scan error:', c.displayName, e.message);
+    throw e; // let scanAll handle logging and toast
   }
-  updateKPIs();
-  render();
 }
 
 // ── SCAN ALL ──────────────────────────────────────────────────
@@ -475,7 +462,7 @@ async function scanAll() {
   const btn = document.getElementById('scanBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spin">⏳</span> Checking...';
   const p = document.getElementById('prog'); p.classList.add('show');
-  logAction('Refresh All started — checking ' + roster.length + ' clinicians for changes', 'system');
+  logAction('Refresh All started — checking ' + roster.length + ' clinicians', 'system');
 
   const checks = await Promise.all(roster.map(async c => {
     try {
@@ -489,32 +476,106 @@ async function scanAll() {
 
   if (!toScan.length) {
     document.getElementById('pFill').style.width = '100%';
-    document.getElementById('pLbl').textContent = '✓ All credentials current — no new uploads detected';
+    document.getElementById('pLbl').textContent = '✓ All up to date — no new uploads detected';
     btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
-    toast('No changes detected — ' + skipped + ' clinicians up to date');
+    toast('No changes — ' + skipped + ' clinicians already current');
+    logAction('Refresh All — no changes detected, ' + skipped + ' clinicians up to date', 'system');
     setTimeout(() => p.classList.remove('show'), 5000);
     return;
   }
 
   btn.innerHTML = '<span class="spin">⏳</span> Scanning ' + toScan.length + '...';
-  let done = 0;
-  const BATCH = 1;
-  for (let i = 0; i < toScan.length; i += BATCH) {
-    const batch = toScan.slice(i, i + BATCH);
-    document.getElementById('pFill').style.width = Math.round(done / toScan.length * 100) + '%';
-    document.getElementById('pLbl').textContent = 'Scanning ' + batch.map(c => c.displayName.split(' ')[0]).join(', ') + '... (' + done + '/' + toScan.length + ')';
-    await Promise.all(batch.map(c => scanOne(roster.indexOf(c))));
-    done += batch.length;
+  let done = 0, errors = 0;
+
+  for (let i = 0; i < toScan.length; i++) {
+    const c = toScan[i];
+    const idx = roster.indexOf(c);
+    const oldData = c.data ? { credentials: Object.assign({}, c.data.credentials) } : null;
+
+    // Update progress bar and label
+    document.getElementById('pFill').style.width = Math.round(i / toScan.length * 100) + '%';
+    document.getElementById('pLbl').textContent = 'Scanning ' + c.displayName.split(' ')[0] + '... (' + (i + 1) + '/' + toScan.length + ')';
+
+    // Mark as scanning in UI
+    roster[idx].scanning = true;
+    updateRow(idx);
+
+    try {
+      await scanOne(idx);
+      done++;
+      // Log result
+      const items = collectItems(roster[idx]);
+      if (items.length === 0) {
+        logAction('Scanned: ' + c.displayName + ' — All credentials current', 'good', 'Compliant');
+      } else {
+        logAction('Scanned: ' + c.displayName + ' — ' + items.length + ' item(s) need attention', 'info', items.length + ' items');
+      }
+      // Detect credential changes
+      if (oldData) detectChanges(roster[idx], oldData, roster[idx].data);
+    } catch (e) {
+      errors++;
+      logAction('Scan error: ' + c.displayName + ' — ' + e.message, 'bad', 'Error');
+    }
+
+    // Update just this row in the UI
+    updateRow(idx);
+    updateKPIs();
   }
+
   document.getElementById('pFill').style.width = '100%';
-  document.getElementById('pLbl').textContent = '✓ ' + done + ' scanned · ' + skipped + ' unchanged';
+  document.getElementById('pLbl').textContent = '✓ ' + done + ' scanned · ' + skipped + ' unchanged' + (errors ? ' · ' + errors + ' errors' : '');
   btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
-  toast('Done — ' + done + ' updated, ' + skipped + ' unchanged');
-  logAction('Refresh All completed — ' + done + ' rescanned, ' + skipped + ' unchanged', 'system');
+  toast('Done — ' + done + ' updated, ' + skipped + ' unchanged' + (errors ? ', ' + errors + ' errors' : ''));
+  logAction('Refresh All complete — ' + done + ' scanned, ' + skipped + ' unchanged' + (errors ? ', ' + errors + ' errors' : ''), 'system');
+  render(); // one full render at the very end
   setTimeout(() => p.classList.remove('show'), 5000);
 }
 
-// ── KPIs ──────────────────────────────────────────────────────
+// ── UPDATE SINGLE ROW (lightweight, no full re-render) ─────────
+function updateRow(idx) {
+  const c = roster[idx];
+  const rs = rowStatus(c);
+  // Just update the status badge and action button in the existing row
+  // Full render happens once at the end of scanAll
+  const rows = document.querySelectorAll('#tb tr.dr');
+  // Find the row for this clinician by data index
+  rows.forEach(row => {
+    if (row.dataset && parseInt(row.dataset.idx) === idx) {
+      const badgeCell = row.cells[3];
+      const actionCell = row.cells[8];
+      if (c.scanning) {
+        badgeCell.innerHTML = '<span class="badge bscn"><span class="spin">⏳</span> Scanning...</span>';
+      } else if (!c.scanned) {
+        badgeCell.innerHTML = '<span class="badge bpend">⏳ Not Scanned</span>';
+        actionCell.innerHTML = '<button class="dbtn blue" onclick="scanOneManual(' + idx + ')">⚡ Scan</button>';
+      } else {
+        const badge = rs === 'expired' ? '<span class="badge bexp">🔴 Expired</span>' :
+          rs === 'expiring' ? '<span class="badge bsoon">⚠️ Expiring</span>' :
+          rs === 'ok' ? '<span class="badge bok">✅ Compliant</span>' :
+          '<span class="badge bmiss">Missing Docs</span>';
+        badgeCell.innerHTML = badge;
+        actionCell.innerHTML = '<div style="display:flex;gap:5px"><button class="dbtn gold" onclick="copySignal(' + idx + ')">📋 Signal</button><button class="dbtn blue" onclick="copyDriveLink(' + idx + ')" title="Copy HR folder link">📁</button></div>';
+      }
+    }
+  });
+}
+
+// Manual scan from UI button (shows toast on error)
+async function scanOneManual(idx) {
+  const c = roster[idx];
+  roster[idx].scanning = true;
+  render();
+  try {
+    await scanOne(idx);
+    const items = collectItems(roster[idx]);
+    logAction('Scanned: ' + c.displayName + ' — ' + (items.length === 0 ? 'All credentials current' : items.length + ' item(s) need attention'), items.length === 0 ? 'good' : 'info', items.length === 0 ? 'Compliant' : items.length + ' items');
+  } catch(e) {
+    logAction('Scan error: ' + c.displayName + ' — ' + e.message, 'bad', 'Error');
+    toast('Scan error for ' + c.displayName + ': ' + e.message);
+  }
+  updateKPIs();
+  render();
+}
 function updateKPIs() {
   let e = 0, s = 0, m = 0, ok = 0, totalCollect = 0;
   roster.forEach(c => {
@@ -616,9 +677,9 @@ function render() {
     const wc = w !== null && w < 0 ? '#C0392B' : w !== null && w <= 30 ? '#D97706' : '#8C90AD';
     const action = c.scanned
       ? `<div style="display:flex;gap:5px"><button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button><button class="dbtn blue" onclick="copyDriveLink(${idx})" title="Copy HR folder link">📁</button></div>`
-      : `<button class="dbtn blue" onclick="scanOne(${idx})" ${c.scanning ? 'disabled' : ''}>⚡ Scan</button>`;
+      : `<button class="dbtn blue" onclick="scanOneManual(${idx})" ${c.scanning ? 'disabled' : ''}>⚡ Scan</button>`;
 
-    let rows = `<tr class="dr">
+    let rows = `<tr class="dr" data-idx="${idx}">
       <td><button class="rb" onclick="expanded[${idx}]=!expanded[${idx}];render()">${expanded[idx] ? '▲' : '▼'}</button></td>
       <td><div style="font-weight:700">${c.displayName}</div><div style="font-size:10px;color:#8C90AD;font-weight:600">${c.cred || ''}</div></td>
       <td>${tp}</td><td>${badge}</td>
