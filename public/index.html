@@ -147,7 +147,24 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
 .copy-all-btn{background:#2B3FA0;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.3px}
 .copy-all-btn:hover{background:#1e2d80}
 
-/* SCAN ALL BTN */
+/* ACTIVITY LOG */
+.log-wrap{background:#fff;border:1px solid #E2E4F0;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.log-entry{display:flex;align-items:flex-start;gap:12px;padding:8px 14px;border-bottom:1px solid #F0F0F8;font-size:11px}
+.log-entry:last-child{border-bottom:none}
+.log-entry.change{background:#F0FDF4;border-left:3px solid #22C55E}
+.log-entry.change-bad{background:#FEF2F2;border-left:3px solid #EF4444}
+.log-entry.change-warn{background:#FFFBEB;border-left:3px solid #F59E0B}
+.log-entry.change-info{background:#EEF1FF;border-left:3px solid #3D52D5}
+.log-entry.change-purple{background:#F5F0FF;border-left:3px solid #7C3AED}
+.log-time{color:#8C90AD;font-weight:600;white-space:nowrap;min-width:58px;padding-top:1px}
+.log-text{color:#1A1D2E;line-height:1.4;flex:1}
+.log-badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:3px;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap;margin-top:1px}
+.log-empty{padding:40px;text-align:center;color:#8C90AD;font-size:12px;font-weight:600}
+.eod-btn{background:#2B3FA0;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer}
+.eod-btn:hover{background:#1e2d80}
+.log-legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:10px;font-weight:600;color:#8C90AD;align-items:center}
+.leg{display:flex;align-items:center;gap:4px}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .scan-btn{background:#F0A500;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.3px}
 .scan-btn:disabled{opacity:.5;cursor:not-allowed}
 .scan-btn:hover:not(:disabled){background:#d4900a}
@@ -165,6 +182,7 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
   <div class="nav-brand">INDEPENDENCE <span>IHRD</span></div>
   <div class="nl act" id="nav-roster" onclick="showTab('roster')">Roster</div>
   <div class="nl" id="nav-queue" onclick="showTab('queue')">HR Action Queue</div>
+  <div class="nl" id="nav-log" onclick="showTab('log')">Activity Log</div>
   <div class="nav-r">
     <button class="scan-btn" id="scanBtn" onclick="scanAll()">&#8635; Refresh All</button>
   </div>
@@ -252,6 +270,34 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
   </div>
 </div>
 
+<!-- ═══════════════ ACTIVITY LOG TAB ═══════════════ -->
+<div class="pg" id="pg-log">
+  <div class="hbar">
+    <div>
+      <h1>Activity Log</h1>
+      <div class="hsub" id="logSub">All HR assistant actions logged here — refreshes as work happens</div>
+    </div>
+    <div class="hbar-r">
+      <button class="eod-btn" onclick="generateEOD()">📋 Copy EOD Report</button>
+      <button class="dbtn" onclick="clearLog()" style="margin-left:6px;font-size:10px;padding:6px 10px">Clear Log</button>
+    </div>
+  </div>
+
+  <div class="log-legend">
+    <span style="font-weight:700;color:#1A1D2E;margin-right:4px">Color key:</span>
+    <span class="leg"><span class="leg-dot" style="background:#22C55E"></span> Credential improved</span>
+    <span class="leg"><span class="leg-dot" style="background:#EF4444"></span> Credential worsened / expired</span>
+    <span class="leg"><span class="leg-dot" style="background:#F59E0B"></span> Credential expiring soon</span>
+    <span class="leg"><span class="leg-dot" style="background:#3D52D5"></span> Missing / action taken</span>
+    <span class="leg"><span class="leg-dot" style="background:#7C3AED"></span> HEIC file flagged</span>
+    <span class="leg"><span class="leg-dot" style="background:#E2E4F0"></span> System action</span>
+  </div>
+
+  <div class="log-wrap" id="logWrap">
+    <div class="log-empty" id="logEmpty">No activity yet today. Actions will appear here as work is done.</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -272,6 +318,7 @@ function showTab(t) {
   document.getElementById('pg-' + t).classList.add('on');
   document.getElementById('nav-' + t).classList.add('act');
   if (t === 'queue') renderQueue();
+  if (t === 'log') renderLog();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
@@ -390,6 +437,7 @@ async function loadRoster() {
 async function scanOne(idx) {
   const c = roster[idx];
   if (!c || c.scanning) return;
+  const oldData = c.data ? JSON.parse(JSON.stringify(c.data)) : null;
   roster[idx].scanning = true;
   roster[idx].scanned = false;
   render();
@@ -403,9 +451,18 @@ async function scanOne(idx) {
     roster[idx].scanning = false;
     if (data.employmentType === 'W2') roster[idx].emp = 'W2';
     else if (data.employmentType === '1099') roster[idx].emp = '1099';
+    // Log the scan and detect credential changes
+    const items = collectItems(roster[idx]);
+    if (items.length === 0) {
+      logAction('Scanned: ' + c.displayName + ' — All credentials current ✅', 'good', 'Compliant');
+    } else {
+      logAction('Scanned: ' + c.displayName + ' — ' + items.length + ' item(s) need attention', 'info', items.length + ' items');
+    }
+    detectChanges(roster[idx], oldData, data);
   } catch (e) {
     roster[idx].scanning = false;
     roster[idx].scanned = false;
+    logAction('Scan error: ' + c.displayName + ' — ' + e.message, 'bad', 'Error');
     toast('Scan error for ' + c.displayName + ': ' + e.message);
     console.error('Scan error:', e);
   }
@@ -418,6 +475,7 @@ async function scanAll() {
   const btn = document.getElementById('scanBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spin">⏳</span> Checking...';
   const p = document.getElementById('prog'); p.classList.add('show');
+  logAction('Refresh All started — checking ' + roster.length + ' clinicians for changes', 'system');
 
   const checks = await Promise.all(roster.map(async c => {
     try {
@@ -452,6 +510,7 @@ async function scanAll() {
   document.getElementById('pLbl').textContent = '✓ ' + done + ' scanned · ' + skipped + ' unchanged';
   btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
   toast('Done — ' + done + ' updated, ' + skipped + ' unchanged');
+  logAction('Refresh All completed — ' + done + ' rescanned, ' + skipped + ' unchanged', 'system');
   setTimeout(() => p.classList.remove('show'), 5000);
 }
 
@@ -481,11 +540,15 @@ function openDriveFolder(idx) {
   const c = roster[idx];
   const url = 'https://drive.google.com/drive/folders/' + c.id;
   window.open(url, '_blank');
+  logAction('Opened Drive folder: ' + c.displayName, 'system');
 }
 function copyDriveLink(idx) {
   const c = roster[idx];
   const url = 'https://drive.google.com/drive/folders/' + c.id;
-  navigator.clipboard.writeText(url).then(() => toast('Drive folder link copied for ' + c.displayName.split(' ')[0]));
+  navigator.clipboard.writeText(url).then(() => {
+    toast('Drive folder link copied for ' + c.displayName.split(' ')[0]);
+    logAction('Folder link copied: ' + c.displayName, 'info', '📁 Link Copied');
+  });
 }
 function copySignal(idx) {
   const c = roster[idx];
@@ -495,10 +558,14 @@ function copySignal(idx) {
   const lines = items.map(i => {
     if (i.status === 'expired') return '• ' + i.cred + ': EXPIRED (' + fmt(i.exp) + ') — please re-upload';
     if (i.status === 'expiring') return '• ' + i.cred + ': Expiring in ' + i.days + ' days (' + fmt(i.exp) + ') — please re-upload';
+    if (i.status === 'heic') return '• ' + i.cred + ': File is HEIC format — please re-upload as JPG or PDF';
     return '• ' + i.cred + ': Not on file — please upload to your HR Drive folder';
   });
   const msg = 'Hi ' + c.displayName.split(' ')[0] + ', this is the Independence HR team. We need the following credentials updated in your Google Drive HR folder:\n\n' + lines.join('\n') + '\n\nPlease upload at your earliest convenience. Thank you!';
-  navigator.clipboard.writeText(msg).then(() => toast('Signal message copied for ' + c.displayName.split(' ')[0]));
+  navigator.clipboard.writeText(msg).then(() => {
+    toast('Signal message copied for ' + c.displayName.split(' ')[0]);
+    logAction('Signal message copied: ' + c.displayName + ' (' + items.map(i => i.cred).join(', ') + ')', 'info', '📋 Signal Sent');
+  });
 }
 
 function copyAllSignals() {
@@ -695,6 +762,95 @@ function renderQueue() {
 
   html += '</div>';
   container.innerHTML = html;
+}
+
+// ── ACTIVITY LOG ──────────────────────────────────────────────
+let activityLog = [];
+
+function logAction(text, type, badge) {
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  activityLog.push({ time, text, type: type || 'system', badge: badge || '', ts: now });
+  renderLog();
+}
+
+function renderLog() {
+  const wrap = document.getElementById('logWrap');
+  const empty = document.getElementById('logEmpty');
+  document.getElementById('logSub').textContent =
+    activityLog.length + ' actions logged today — ' + new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  if (!activityLog.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  wrap.innerHTML = [...activityLog].reverse().map(e => {
+    const typeClass = {
+      'good': 'change', 'bad': 'change-bad', 'warn': 'change-warn',
+      'info': 'change-info', 'heic': 'change-purple', 'system': ''
+    }[e.type] || '';
+    const badgeHtml = e.badge
+      ? `<span class="log-badge" style="background:${{'good':'#DCFCE7','bad':'#FEE2E2','warn':'#FEF3C7','info':'#EEF1FF','heic':'#F5F0FF','system':'#F1F2F7'}[e.type]||'#F1F2F7'};color:${{'good':'#15803D','bad':'#C0392B','warn':'#92400E','info':'#3D52D5','heic':'#7C3AED','system':'#8C90AD'}[e.type]||'#8C90AD'}">${e.badge}</span>`
+      : '';
+    return `<div class="log-entry ${typeClass}">
+      <div class="log-time">${e.time}</div>
+      <div class="log-text">${e.text}</div>
+      ${badgeHtml}
+    </div>`;
+  }).join('');
+}
+
+function clearLog() {
+  if (!confirm('Clear all activity log entries for today?')) return;
+  activityLog = [];
+  renderLog();
+  toast('Activity log cleared');
+}
+
+function generateEOD() {
+  if (!activityLog.length) { toast('No activity to report yet'); return; }
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const lines = activityLog.map(e => {
+    const prefix = e.type === 'good' ? '✅ ' : e.type === 'bad' ? '🔴 ' : e.type === 'warn' ? '⚠️ ' : e.type === 'heic' ? '🟣 ' : e.type === 'info' ? '📋 ' : '   ';
+    return e.time + '  ' + prefix + e.text;
+  });
+  const report = [
+    'IHRD Daily Activity Report',
+    today,
+    '─'.repeat(40),
+    '',
+    ...lines,
+    '',
+    '─'.repeat(40),
+    'Total actions: ' + activityLog.length,
+    'Sent from IHRD — Independence HR Dashboard',
+  ].join('\n');
+  navigator.clipboard.writeText(report).then(() => toast('EOD report copied — paste into Signal'));
+}
+
+// ── CREDENTIAL CHANGE DETECTION ───────────────────────────────
+function detectChanges(clinician, oldData, newData) {
+  if (!oldData || !oldData.credentials || !newData || !newData.credentials) return;
+  const name = clinician.displayName;
+  CR.forEach(k => {
+    const oldV = oldData.credentials[k] || {};
+    const newV = newData.credentials[k] || {};
+    const oldSt = credStatus(oldV, k);
+    const newSt = credStatus(newV, k);
+    if (oldSt === newSt) return;
+    const label = name + ' — ' + k;
+    // Improvement
+    if (newSt === 'current' && oldSt !== 'current') {
+      logAction(label + ': ' + oldSt.toUpperCase() + ' → CURRENT' + (newV.e ? ' (exp ' + fmt(newV.e) + ')' : ''), 'good', '✅ Resolved');
+    } else if (newSt === 'expiring' && (oldSt === 'expired' || oldSt === 'missing')) {
+      logAction(label + ': ' + oldSt.toUpperCase() + ' → EXPIRING SOON (' + fmt(newV.e) + ')', 'warn', '⚠ Updated');
+    } else if (newSt === 'expired' && oldSt !== 'expired') {
+      logAction(label + ': now EXPIRED (' + fmt(newV.e) + ')', 'bad', '🔴 Expired');
+    } else if (newSt === 'missing' && oldSt !== 'missing') {
+      logAction(label + ': document no longer detected — now MISSING', 'bad', '⚠ Missing');
+    } else if (newSt === 'heic' && oldSt !== 'heic') {
+      logAction(label + ': HEIC file detected — must re-upload as JPG or PDF', 'heic', '🟣 HEIC');
+    } else if (oldSt === 'heic' && newSt !== 'heic' && newSt !== 'missing') {
+      logAction(label + ': HEIC resolved — now ' + newSt.toUpperCase(), 'good', '✅ Fixed');
+    }
+  });
 }
 
 loadRoster();
