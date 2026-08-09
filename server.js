@@ -287,7 +287,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
     console.log('Calling Claude with', readableFiles.length, 'files...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1200,
+      max_tokens: 2500,
       system: 'You are a JSON-only credential extraction API for a healthcare staffing company. Your job is to read HR documents — which may be photos, scanned images, or PDFs — and extract expiration dates. RULES: (1) Always respond with ONLY a valid JSON object, nothing else — no explanations, no markdown, no preamble. Start with { end with }. (2) Make your BEST GUESS from whatever is visible. If a document is a photo of a license, read the expiration date from the card even if the image quality is imperfect. (3) Only set m:true if there is truly NO document present for that credential at all. If a document exists but you cannot read the date clearly, set e:null and put a brief note in nt — do NOT set m:true. (4) For image files, look carefully at all text including small print, watermarks, and corners where expiration dates typically appear. (5) Use the filename as a strong hint — a file named "DriverLicense" contains the driver license credential. (6) If you can see a date anywhere on the document, use it. Partial dates are better than nothing.',
       messages: [{ role: 'user', content: msgContent }],
     });
