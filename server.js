@@ -25,7 +25,7 @@ function getDriveClient() {
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
 const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB per file max
-const MAX_FILES_TO_SEND = 10; // max files sent to Claude
+const MAX_FILES_TO_SEND = 15; // max files sent to Claude
 
 // ── PERSISTENT CACHE ───────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
@@ -162,34 +162,31 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
-    // Filter to readable file types
+    // All potentially readable files — include HEIC, we'll handle conversion during download
     const candidates = allFiles.filter(f =>
-      !f.name.toLowerCase().endsWith('.heic') &&
-      f.mimeType !== 'image/heic' &&
-      (f.mimeType.startsWith('image/') || f.mimeType === 'application/pdf')
+      f.mimeType.startsWith('image/') ||
+      f.mimeType === 'application/pdf' ||
+      f.name.toLowerCase().endsWith('.heic') ||
+      f.mimeType === 'image/heic'
     );
 
-    const skippedHeic = allFiles.filter(f =>
-      f.name.toLowerCase().endsWith('.heic') || f.mimeType === 'image/heic'
-    ).map(f => f.name);
-
     const skippedLarge = candidates.filter(f => parseInt(f.size || 0) > MAX_FILE_BYTES).map(f => f.name);
-    
-    // Priority keywords — files matching these get sent to Claude first
+
+    // Priority keywords — credential files get sent to Claude first
     const PRIORITY_KEYWORDS = [
       'license', 'cert', 'cpr', 'bls', 'insurance', 'registration', 'reg',
       'physical', 'exam', 'tb', 'ppd', 'flu', 'vaccine', 'immunization',
-      'driver', 'dl', 'id ', 'physical', 'clearance', 'liability'
+      'driver', 'dl', 'clearance', 'liability'
     ];
     const SKIP_KEYWORDS_FILE = [
       'badge', 'photo', 'resume', 'ssn', 'social security', 'voided', 'check',
       'bgc', 'background', 'onboarding', 'guide', 'handbook', 'w4', 'w-4',
-      'i9', 'i-9', 'direct deposit', 'passport', 'offer letter', 'contract'
+      'i9', 'i-9', 'direct deposit', 'offer letter', 'contract'
     ];
 
     const underLimit = candidates.filter(f => parseInt(f.size || 0) <= MAX_FILE_BYTES);
-    
-    // Sort: credential files first, skip/irrelevant files last
+
+    // Sort: credential files first, irrelevant files last
     const prioritized = underLimit.sort((a, b) => {
       const aName = a.name.toLowerCase();
       const bName = b.name.toLowerCase();
@@ -206,35 +203,61 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     const readableFiles = prioritized.slice(0, MAX_FILES_TO_SEND);
 
-    console.log('Files:', allFiles.length, '| Readable:', readableFiles.length, '| Skipped large:', skippedLarge.length, '| HEIC:', skippedHeic.length);
+    console.log('Files:', allFiles.length, '| Sending:', readableFiles.length, '| Skipped large:', skippedLarge.length);
+    console.log('File order:', readableFiles.map(f => f.name).join(', '));
 
     const msgContent = [];
 
-    // Note skipped files as text so Claude knows what's missing
-    const skippedNotes = [
-      ...skippedHeic.map(n => 'HEIC (unreadable): ' + n),
-      ...skippedLarge.map(n => 'TOO LARGE to read: ' + n),
-    ];
-    if (skippedNotes.length) {
-      msgContent.push({ type: 'text', text: 'Note — these files could not be read:\n' + skippedNotes.join('\n') + '\n\n' });
+    // Note oversized files
+    if (skippedLarge.length) {
+      msgContent.push({ type: 'text', text: 'Note — these files were too large to read:\n' + skippedLarge.join('\n') + '\n\n' });
     }
 
-    // Download each readable file one at a time, free memory immediately
+    // Download each file one at a time
     for (const file of readableFiles) {
+      const isHeic = file.name.toLowerCase().endsWith('.heic') || file.mimeType === 'image/heic';
       try {
-        console.log('Downloading:', file.name, '(', Math.round(parseInt(file.size||0)/1024), 'KB)');
-        const dlRes = await drive.files.get(
-          { fileId: file.id, alt: 'media' },
-          { responseType: 'arraybuffer' }
-        );
-        const b64 = Buffer.from(dlRes.data).toString('base64');
-        dlRes.data = null; // free immediately
+        console.log('Downloading:', file.name, isHeic ? '(HEIC→JPEG)' : '', '(', Math.round(parseInt(file.size||0)/1024), 'KB)');
+
+        let b64, mediaType;
+
+        if (isHeic) {
+          // For HEIC files, use Drive's built-in export to convert to JPEG
+          try {
+            const exportRes = await drive.files.export(
+              { fileId: file.id, mimeType: 'image/jpeg' },
+              { responseType: 'arraybuffer' }
+            );
+            b64 = Buffer.from(exportRes.data).toString('base64');
+            mediaType = 'image/jpeg';
+            exportRes.data = null;
+            console.log('HEIC converted to JPEG OK:', file.name);
+          } catch (exportErr) {
+            // Drive export doesn't work for user-uploaded files — fall back to direct download
+            console.log('HEIC export failed, trying direct download:', exportErr.message);
+            const dlRes = await drive.files.get(
+              { fileId: file.id, alt: 'media' },
+              { responseType: 'arraybuffer' }
+            );
+            b64 = Buffer.from(dlRes.data).toString('base64');
+            mediaType = 'image/jpeg'; // tell Claude it's JPEG even if HEIC bytes
+            dlRes.data = null;
+          }
+        } else {
+          const dlRes = await drive.files.get(
+            { fileId: file.id, alt: 'media' },
+            { responseType: 'arraybuffer' }
+          );
+          b64 = Buffer.from(dlRes.data).toString('base64');
+          mediaType = file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType;
+          dlRes.data = null;
+        }
 
         msgContent.push({
-          type: file.mimeType === 'application/pdf' ? 'document' : 'image',
+          type: mediaType === 'application/pdf' ? 'document' : 'image',
           source: {
             type: 'base64',
-            media_type: file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType,
+            media_type: mediaType,
             data: b64
           }
         });
