@@ -222,7 +222,8 @@ app.get('/api/scan/:folderId', async (req, res) => {
         let b64, mediaType;
 
         if (isHeic) {
-          // For HEIC files, use Drive's built-in export to convert to JPEG
+          // HEIC files: try Drive export to JPEG, skip if it fails
+          // (sending raw HEIC bytes to Claude causes an error)
           try {
             const exportRes = await drive.files.export(
               { fileId: file.id, mimeType: 'image/jpeg' },
@@ -233,15 +234,11 @@ app.get('/api/scan/:folderId', async (req, res) => {
             exportRes.data = null;
             console.log('HEIC converted to JPEG OK:', file.name);
           } catch (exportErr) {
-            // Drive export doesn't work for user-uploaded files — fall back to direct download
-            console.log('HEIC export failed, trying direct download:', exportErr.message);
-            const dlRes = await drive.files.get(
-              { fileId: file.id, alt: 'media' },
-              { responseType: 'arraybuffer' }
-            );
-            b64 = Buffer.from(dlRes.data).toString('base64');
-            mediaType = 'image/jpeg'; // tell Claude it's JPEG even if HEIC bytes
-            dlRes.data = null;
+            // Drive cannot export user-uploaded HEIC files
+            // Tell Claude explicitly so it flags as HEIC error, not missing
+            console.log('HEIC skipped (cannot convert):', file.name, exportErr.message);
+            msgContent.push({ type: 'text', text: 'FILE: ' + file.name + ' - FORMAT ERROR: File is HEIC format and cannot be read. Document EXISTS but must be re-uploaded as JPG or PDF. Do NOT mark as missing — use m:false, e:null, nt:"HEIC format — clinician must re-upload as JPG or PDF"\n' });
+            continue;
           }
         } else {
           const dlRes = await drive.files.get(
