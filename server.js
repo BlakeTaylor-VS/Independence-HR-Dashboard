@@ -24,10 +24,9 @@ function getDriveClient() {
 
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
-const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB per file max
-const MAX_FILES_TO_SEND = 20; // max files sent to Claude
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_FILES_TO_SEND = 20;
 
-// ── PERSISTENT CACHE ───────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const CACHE_FILE = path.join(DATA_DIR, 'scan_cache.json');
@@ -50,7 +49,6 @@ console.log('ENV CHECK - GOOGLE_CLIENT_EMAIL present:', !!process.env.GOOGLE_CLI
 console.log('ENV CHECK - GOOGLE_PRIVATE_KEY present:', !!process.env.GOOGLE_PRIVATE_KEY);
 console.log('ENV CHECK - ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
 
-// ── LIST ALL CLINICIAN FOLDERS ─────────────────────────────────
 app.get('/api/clinicians', async (req, res) => {
   try {
     const drive = getDriveClient();
@@ -83,12 +81,10 @@ app.get('/api/clinicians', async (req, res) => {
   }
 });
 
-// ── CHECK IF FOLDER HAS NEW FILES SINCE LAST SCAN ─────────────
 app.get('/api/check/:folderId', async (req, res) => {
   try {
     const drive = getDriveClient();
     const { folderId } = req.params;
-
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
       fields: 'files(id, name)',
@@ -96,7 +92,6 @@ app.get('/api/check/:folderId', async (req, res) => {
     });
     const hrFolder = (subRes.data.files || []).find(f => f.name.toLowerCase().includes('hr doc'));
     if (!hrFolder) return res.json({ hasChanges: false, reason: 'no_hr_folder' });
-
     const fileRes = await drive.files.list({
       q: `'${hrFolder.id}' in parents and trashed = false`,
       fields: 'files(id, modifiedTime)',
@@ -115,16 +110,13 @@ app.get('/api/check/:folderId', async (req, res) => {
   }
 });
 
-// ── SCAN A SINGLE CLINICIAN ────────────────────────────────────
 app.get('/api/scan/:folderId', async (req, res) => {
   const { folderId } = req.params;
   console.log('=== SCAN START:', folderId);
-
   try {
     const drive = getDriveClient();
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Find HR Docs subfolder
     const subRes = await drive.files.list({
       q: `mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`,
       fields: 'files(id, name)',
@@ -139,7 +131,6 @@ app.get('/api/scan/:folderId', async (req, res) => {
       return res.json(result);
     }
 
-    // List files — include size so we can skip oversized ones
     let allFiles = [];
     let pageToken = null;
     do {
@@ -162,17 +153,22 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     const latestModified = Math.max(...allFiles.map(f => new Date(f.modifiedTime).getTime()));
 
-    // All potentially readable files — include HEIC, we'll handle conversion during download
+    const isHeicFile = (f) =>
+      f.name.toLowerCase().endsWith('.heic') ||
+      f.name.toLowerCase().endsWith('.heif') ||
+      f.mimeType === 'image/heic' ||
+      f.mimeType === 'image/heif' ||
+      f.mimeType === 'image/heic-sequence' ||
+      f.mimeType === 'image/heif-sequence';
+
     const candidates = allFiles.filter(f =>
       f.mimeType.startsWith('image/') ||
       f.mimeType === 'application/pdf' ||
-      f.name.toLowerCase().endsWith('.heic') ||
-      (f.mimeType === 'image/heic' || f.mimeType === 'image/heif' || f.mimeType === 'image/heic-sequence' || f.mimeType === 'image/heif-sequence')
+      isHeicFile(f)
     );
 
     const skippedLarge = candidates.filter(f => parseInt(f.size || 0) > MAX_FILE_BYTES).map(f => f.name);
 
-    // Priority keywords — credential files get sent to Claude first
     const PRIORITY_KEYWORDS = [
       'license', 'cert', 'cpr', 'bls', 'insurance', 'registration', 'reg',
       'physical', 'exam', 'tb', 'ppd', 'flu', 'vaccine', 'immunization',
@@ -188,8 +184,6 @@ app.get('/api/scan/:folderId', async (req, res) => {
     ];
 
     const underLimit = candidates.filter(f => parseInt(f.size || 0) <= MAX_FILE_BYTES);
-
-    // Sort: credential files first, irrelevant files last
     const prioritized = underLimit.sort((a, b) => {
       const aName = a.name.toLowerCase();
       const bName = b.name.toLowerCase();
@@ -205,28 +199,20 @@ app.get('/api/scan/:folderId', async (req, res) => {
     });
 
     const readableFiles = prioritized.slice(0, MAX_FILES_TO_SEND);
-
     console.log('Files:', allFiles.length, '| Sending:', readableFiles.length, '| Skipped large:', skippedLarge.length);
     console.log('File order:', readableFiles.map(f => f.name).join(', '));
 
     const msgContent = [];
-
-    // Note oversized files
     if (skippedLarge.length) {
-      msgContent.push({ type: 'text', text: 'Note — these files were too large to read:\n' + skippedLarge.join('\n') + '\n\n' });
+      msgContent.push({ type: 'text', text: 'Note - these files were too large to read:\n' + skippedLarge.join('\n') + '\n\n' });
     }
 
-    // Download each file one at a time
     for (const file of readableFiles) {
-      const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.mimeType === 'image/heic' || file.mimeType === 'image/heif' || file.mimeType === 'image/heic-sequence' || file.mimeType === 'image/heif-sequence';
+      const isHeic = isHeicFile(file);
       try {
-        console.log('Downloading:', file.name, isHeic ? '(HEIC→JPEG)' : '', '(', Math.round(parseInt(file.size||0)/1024), 'KB)');
-
+        console.log('Downloading:', file.name, isHeic ? '(HEIC)' : '', '(', Math.round(parseInt(file.size || 0) / 1024), 'KB)');
         let b64, mediaType;
-
         if (isHeic) {
-          // HEIC files: try Drive export to JPEG, skip if it fails
-          // (sending raw HEIC bytes to Claude causes an error)
           try {
             const exportRes = await drive.files.export(
               { fileId: file.id, mimeType: 'image/jpeg' },
@@ -235,12 +221,10 @@ app.get('/api/scan/:folderId', async (req, res) => {
             b64 = Buffer.from(exportRes.data).toString('base64');
             mediaType = 'image/jpeg';
             exportRes.data = null;
-            console.log('HEIC converted to JPEG OK:', file.name);
+            console.log('HEIC converted to JPEG:', file.name);
           } catch (exportErr) {
-            // Drive cannot export user-uploaded HEIC files
-            // Tell Claude explicitly so it flags as HEIC error, not missing
-            console.log('HEIC skipped (cannot convert):', file.name, exportErr.message);
-            msgContent.push({ type: 'text', text: 'FILE: ' + file.name + ' - FORMAT ERROR: File is HEIC format and cannot be read. Document EXISTS but must be re-uploaded as JPG or PDF. Do NOT mark as missing — use m:false, e:null, nt:"HEIC format — clinician must re-upload as JPG or PDF"\n' });
+            console.log('HEIC cannot be converted:', file.name, exportErr.message);
+            msgContent.push({ type: 'text', text: 'FILE: ' + file.name + ' - FORMAT ERROR: File is HEIC format and cannot be read. Document EXISTS but must be re-uploaded as JPG or PDF. Do NOT mark as missing - use m:false, e:null, nt:"HEIC format - clinician must re-upload as JPG or PDF"\n' });
             continue;
           }
         } else {
@@ -252,14 +236,9 @@ app.get('/api/scan/:folderId', async (req, res) => {
           mediaType = file.mimeType === 'application/pdf' ? 'application/pdf' : file.mimeType;
           dlRes.data = null;
         }
-
         msgContent.push({
           type: mediaType === 'application/pdf' ? 'document' : 'image',
-          source: {
-            type: 'base64',
-            media_type: mediaType,
-            data: b64
-          }
+          source: { type: 'base64', media_type: mediaType, data: b64 }
         });
         msgContent.push({ type: 'text', text: '(File: ' + file.name + ')\n' });
         console.log('Added:', file.name);
@@ -269,9 +248,8 @@ app.get('/api/scan/:folderId', async (req, res) => {
       }
     }
 
-    // If nothing readable at all, still return a scanned result
     if (msgContent.length === 0) {
-      console.log('No readable files — returning empty scan');
+      console.log('No readable files');
       const result = { scanned: true, credentials: {}, note: 'No readable files found' };
       scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: result };
       saveCache(scanCache);
@@ -281,26 +259,25 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     msgContent.push({
       type: 'text',
-      text: 'Today: ' + today + '. You are reviewing HR documents for a home health therapy clinician. Extract credential information for these 13 items.\n\nCREDENTIALS WITH EXPIRATION DATES:\n- Prof License: state therapy license expiration (PT, PTA, OT, COTA, SLP)\n- Driver License: expiration date on the ID card\n- Car Reg: registration valid-through date (DMV card)\n- Car Insurance: policy expiration date\n- CPR: card expiration or completion date + 2 years\n- Liability Ins: malpractice/professional liability expiration (N/A for W2 employees — set na:true)\n- Physical Exam: exam/visit date + 1 year = expiration\n- TB Clearance: test date + 1 year, or read expiration directly\n- Flu Vaccine: expires Oct 1 of the following flu season year\n\nPRESENCE-ONLY CREDENTIALS (no expiration — just confirm document exists):\n- Hep B Vaccine: proof of Hepatitis B vaccination series or titer. Set e:null always. Set m:false if ANY immunization record, vaccine record, or shot record showing Hep B is present.\n- MMR Vaccine: proof of MMR/Measles vaccination or titer. Set e:null always. Set m:false if ANY immunization record showing MMR/Measles is present. Varicella records may be in the same document.\n- Resume: any resume or CV document. Set e:null, m:false if present.\n- Badge Photo: any headshot, badge photo, or profile photo. Set e:null, m:false if present.\n\nIMPORTANT RULES:\n- Documents may be photos or PDFs — read carefully regardless of image quality\n- Use the FILENAME as a strong hint for which credential each file contains\n- A single immunization record PDF may satisfy Hep B, MMR, and Flu Vaccine simultaneously — check carefully\n- If a document EXISTS but date is unclear: set e:null, m:false, note briefly in nt\n- Only set m:true if NO document exists for that credential\n- W2 employees: set Liability Ins na:true\n\nReturn ONLY this JSON, no other text:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Hep B Vaccine":{"e":null,"m":false,"na":false,"nt":""},"MMR Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Resume":{"e":null,"m":false,"na":false,"nt":""},"Badge Photo":{"e":null,"m":false,"na":false,"nt":""}}}'
+      text: 'Today: ' + today + '. You are reviewing HR documents for a home health therapy clinician. Extract credential information for these 13 items.\n\nCREDENTIALS WITH EXPIRATION DATES:\n- Prof License: state therapy license expiration (PT, PTA, OT, COTA, SLP)\n- Driver License: expiration date on the ID card\n- Car Reg: registration valid-through date (DMV card)\n- Car Insurance: policy expiration date\n- CPR: card expiration or completion date + 2 years\n- Liability Ins: malpractice/professional liability expiration (N/A for W2 employees - set na:true)\n- Physical Exam: exam/visit date + 1 year = expiration\n- TB Clearance: test date + 1 year, or read expiration directly\n- Flu Vaccine: expires Oct 1 of the following flu season year\n\nPRESENCE-ONLY CREDENTIALS (no expiration - just confirm document exists):\n- Hep B Vaccine: proof of Hepatitis B vaccination series or titer. Set e:null always. Set m:false if ANY immunization record showing Hep B is present.\n- MMR Vaccine: proof of MMR/Measles vaccination or titer. Set e:null always. Set m:false if ANY immunization record showing MMR/Measles is present.\n- Resume: any resume or CV document. Set e:null, m:false if present.\n- Badge Photo: any headshot, badge photo, or profile photo. Set e:null, m:false if present.\n\nIMPORTANT RULES:\n- Documents may be photos or PDFs - read carefully regardless of image quality\n- Use the FILENAME as a strong hint for which credential each file contains\n- A single immunization record PDF may satisfy Hep B, MMR, and Flu Vaccine simultaneously\n- If a document EXISTS but date is unclear: set e:null, m:false, note briefly in nt\n- Only set m:true if NO document exists for that credential\n- W2 employees: set Liability Ins na:true\n\nReturn ONLY this JSON, no other text:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Hep B Vaccine":{"e":null,"m":false,"na":false,"nt":""},"MMR Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Resume":{"e":null,"m":false,"na":false,"nt":""},"Badge Photo":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
     console.log('Calling Claude with', readableFiles.length, 'files...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2500,
-      system: 'You are a JSON-only credential extraction API for a healthcare staffing company. Your job is to read HR documents — which may be photos, scanned images, or PDFs — and extract expiration dates. RULES: (1) Always respond with ONLY a valid JSON object, nothing else — no explanations, no markdown, no preamble. Start with { end with }. (2) Make your BEST GUESS from whatever is visible. If a document is a photo of a license, read the expiration date from the card even if the image quality is imperfect. (3) Only set m:true if there is truly NO document present for that credential at all. If a document exists but you cannot read the date clearly, set e:null and put a brief note in nt — do NOT set m:true. (4) For image files, look carefully at all text including small print, watermarks, and corners where expiration dates typically appear. (5) Use the filename as a strong hint — a file named "DriverLicense" contains the driver license credential. (6) If you can see a date anywhere on the document, use it. Partial dates are better than nothing.',
+      system: 'You are a JSON-only credential extraction API for a healthcare staffing company. Your job is to read HR documents and extract credential information. RULES: (1) Always respond with ONLY a valid JSON object, nothing else - no explanations, no markdown, no preamble. Start with { end with }. (2) Make your BEST GUESS from whatever is visible. (3) Only set m:true if there is truly NO document present for that credential. If a document exists but you cannot read the date, set e:null and put a note in nt. (4) For presence-only credentials (Hep B, MMR, Resume, Badge Photo) set e:null always - just set m:false if the document exists. (5) Use the filename as a strong hint.',
       messages: [{ role: 'user', content: msgContent }],
     });
 
     const raw = (aiRes.content.find(b => b.type === 'text') || {}).text || '{}';
-    console.log('Raw AI response (first 300 chars):', raw.substring(0, 300));
+    console.log('Raw AI response (first 200):', raw.substring(0, 200));
 
-    // Extract JSON object even if surrounded by commentary
     let clean = raw.replace(/```json|```/g, '').trim();
     const firstBrace = clean.indexOf('{');
     const lastBrace = clean.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-      throw new Error('No JSON object found in AI response: ' + raw.substring(0, 200));
+      throw new Error('No JSON found in AI response: ' + raw.substring(0, 200));
     }
     clean = clean.substring(firstBrace, lastBrace + 1);
 
@@ -308,14 +285,12 @@ app.get('/api/scan/:folderId', async (req, res) => {
     try {
       parsed = JSON.parse(clean);
     } catch (parseErr) {
-      console.error('JSON parse failed on extracted text:', clean.substring(0, 300));
-      throw new Error('AI response was not valid JSON even after extraction: ' + parseErr.message);
+      throw new Error('JSON parse failed: ' + parseErr.message);
     }
     parsed.scanned = true;
 
     scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
     saveCache(scanCache);
-
     console.log('=== SCAN COMPLETE:', folderId);
     res.json(parsed);
 
