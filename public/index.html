@@ -810,10 +810,13 @@ function renderQueue() {
 let activityLog = [];
 
 function logAction(text, type, badge) {
-  const now = new Date();
-  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  activityLog.push({ time, text, type: type || 'system', badge: badge || '', ts: now });
-  renderLog();
+  try {
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    activityLog.push({ time, text, type: type || 'system', badge: badge || '', ts: now });
+    // Only render log if the element exists
+    if (document.getElementById('logWrap')) renderLog();
+  } catch(e) { console.log('logAction error:', e.message); }
 }
 
 function renderLog() {
