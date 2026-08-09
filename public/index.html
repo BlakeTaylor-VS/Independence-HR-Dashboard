@@ -257,7 +257,9 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
 <script>
 // ── CONSTANTS ─────────────────────────────────────────────────
 const T = new Date(new Date().toISOString().split('T')[0]);
-const CR = ['Prof License','Driver License','Car Reg','Car Insurance','CPR','Liability Ins','Physical Exam','TB Clearance','Flu Vaccine'];
+const CR = ['Prof License','Driver License','Car Reg','Car Insurance','CPR','Liability Ins','Physical Exam','TB Clearance','Flu Vaccine','Hep B Vaccine','MMR Vaccine','Resume','Badge Photo'];
+// Presence-only credentials — no expiration date, just on file or not
+const CR_PRESENCE = new Set(['Hep B Vaccine','MMR Vaccine','Resume','Badge Photo']);
 let roster = [];
 let expanded = {};
 let af = 'all';
@@ -274,14 +276,13 @@ function showTab(t) {
 
 // ── HELPERS ───────────────────────────────────────────────────
 function dy(d) { return d ? Math.round((new Date(d) - T) / 86400000) : null; }
-function credStatus(v) {
+function credStatus(v, key) {
   if (!v) return 'missing';
   if (v.na) return 'na';
-  if (v.m || !v.e) {
-    // Check if the note indicates HEIC format issue
-    if (v.nt && v.nt.toLowerCase().includes('heic')) return 'heic';
-    return 'missing';
-  }
+  if (v.nt && v.nt.toLowerCase().includes('heic')) return 'heic';
+  // Presence-only credentials — just on file or missing, no expiry
+  if (key && CR_PRESENCE.has(key)) return v.m ? 'missing' : 'current';
+  if (v.m || !v.e) return 'missing';
   const n = dy(v.e);
   if (n < 0) return 'expired';
   if (n <= 30) return 'expiring';
@@ -292,21 +293,22 @@ function rowStatus(c) {
   if (!c.scanned || !c.data || !c.data.credentials) return 'pending';
   let e = false, s = false, m = false;
   CR.forEach(k => {
-    const st = credStatus(c.data.credentials[k]);
+    const st = credStatus(c.data.credentials[k], k);
     if (st === 'expired') e = true;
     else if (st === 'expiring') s = true;
-    else if (st === 'missing') m = true;
+    else if (st === 'missing' || st === 'heic') m = true;
   });
   if (e) return 'expired'; if (s) return 'expiring'; if (m) return 'missing'; return 'ok';
 }
 function countCreds(c, st) {
   if (!c.data || !c.data.credentials) return 0;
-  return CR.filter(k => credStatus(c.data.credentials[k]) === st).length;
+  return CR.filter(k => credStatus(c.data.credentials[k], k) === st).length;
 }
 function worstDays(c) {
   if (!c.data || !c.data.credentials) return null;
   let w = null;
   CR.forEach(k => {
+    if (CR_PRESENCE.has(k)) return; // skip presence-only, no expiry
     const v = c.data.credentials[k];
     if (v && v.e) { const d = dy(v.e); if (w === null || d < w) w = d; }
   });
@@ -317,7 +319,7 @@ function collectItems(c) {
   const items = [];
   CR.forEach(k => {
     const v = c.data.credentials[k] || {};
-    const st = credStatus(v);
+    const st = credStatus(v, k);
     if (st === 'expired' || st === 'expiring' || st === 'missing' || st === 'heic') {
       items.push({ cred: k, status: st, exp: v.e, days: v.e ? dy(v.e) : null, note: v.nt || '' });
     }
@@ -459,10 +461,10 @@ function updateKPIs() {
   roster.forEach(c => {
     if (!c.scanned || !c.data || !c.data.credentials) return;
     CR.forEach(k => {
-      const st = credStatus(c.data.credentials[k]);
+      const st = credStatus(c.data.credentials[k], k);
       if (st === 'expired') e++;
       else if (st === 'expiring') s++;
-      else if (st === 'missing') m++;
+      else if (st === 'missing' || st === 'heic') m++;
     });
     if (rowStatus(c) === 'ok') ok++;
     totalCollect += collectItems(c).length;
@@ -565,7 +567,7 @@ function render() {
         rows += `<tr class="xrow"><td colspan="9"><div class="det" style="color:#8C90AD">Not yet scanned. Click ⚡ Scan to load credential data.</div></td></tr>`;
       } else {
         const items = collectItems(c);
-        const missing = CR.filter(k => credStatus(c.data.credentials[k]) === 'missing');
+        const missing = CR.filter(k => credStatus(c.data.credentials[k], k) === 'missing');
         const expiredItems = items.filter(i => i.status === 'expired');
         const expiringItems = items.filter(i => i.status === 'expiring');
         const missingItems = items.filter(i => i.status === 'missing');
@@ -575,7 +577,7 @@ function render() {
           const itemHtml = [
             ...expiredItems.map(i => `<div class="ci expired"><span class="ci-tag">Expired</span>${i.cred} — ${fmt(i.exp)} (${Math.abs(i.days)}d ago)</div>`),
             ...expiringItems.map(i => `<div class="ci expiring"><span class="ci-tag">Expiring ${i.days}d</span>${i.cred} — ${fmt(i.exp)}</div>`),
-            ...missingItems.map(i => `<div class="ci missing"><span class="ci-tag">Never Uploaded</span>${i.cred}</div>`),
+            ...missingItems.map(i => `<div class="ci missing"><span class="ci-tag">${CR_PRESENCE.has(i.cred) ? 'Not on File' : 'Never Uploaded'}</span>${i.cred}</div>`),
             ...items.filter(i => i.status === 'heic').map(i => `<div class="ci heic"><span class="ci-tag">⚠ HEIC File</span>${i.cred} — Re-upload as JPG or PDF</div>`)
           ].join('');
           collectHtml = `<div class="collect-list">
@@ -589,10 +591,11 @@ function render() {
           <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#3D52D5;margin-bottom:6px;margin-top:${items.length ? 12 : 0}px">All Credentials</div>
           <div class="cgrid">${CR.map(k => {
             const v = c.data.credentials[k] || {};
-            const st = credStatus(v);
+            const st = credStatus(v, k);
+            const isPresence = CR_PRESENCE.has(k);
             const n = v.e ? dy(v.e) : null;
-            const dt = v.na ? 'N/A — W2' : v.m ? 'Not on file' : v.e ? fmt(v.e) : st === 'heic' ? 'HEIC File' : 'Unreadable';
-            const sub = v.na ? 'Not required' : st === 'heic' ? '⚠ Re-upload as JPG or PDF' : st === 'missing' ? 'Never uploaded' : st === 'expired' ? Math.abs(n) + 'd ago' : st === 'expiring' ? n + 'd left' : 'Current';
+            const dt = v.na ? 'N/A — W2' : st === 'heic' ? 'HEIC File' : isPresence ? (v.m ? 'Not on file' : 'On File ✓') : v.m ? 'Not on file' : v.e ? fmt(v.e) : 'Unreadable';
+            const sub = v.na ? 'Not required' : st === 'heic' ? '⚠ Re-upload as JPG or PDF' : isPresence ? (v.m ? 'Not uploaded' : 'Present') : st === 'missing' ? 'Never uploaded' : st === 'expired' ? Math.abs(n) + 'd ago' : st === 'expiring' ? n + 'd left' : 'Current';
             const sc2 = st === 'expired' ? '#B91C1C' : st === 'expiring' ? '#92400E' : st === 'missing' ? '#2B3FA0' : st === 'heic' ? '#7C3AED' : v.na ? '#8C90AD' : '#15803D';
             return `<div class="cc ${v.na ? 'na' : st}"><div class="cn">${k}</div><div class="cd">${dt}</div><div class="cs" style="color:${sc2}">${sub}${v.nt && st !== 'heic' ? ' · ' + v.nt : ''}</div></div>`;
           }).join('')}</div>
