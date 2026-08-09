@@ -105,6 +105,7 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
 .cc.expired{background:#FEF2F2;border-color:#FCA5A5}
 .cc.missing{background:#EEF1FF;border-color:#C5CDFA}
 .cc.na{background:#F8F9FA;border-color:#E2E4F0;opacity:.6}
+.cc.heic{background:#F5F0FF;border-color:#A78BFA;border-width:2px}
 .cn{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8C90AD;margin-bottom:3px}
 .cd{font-size:12px;font-weight:700;color:#1A1D2E}
 .cs{font-size:10px;font-weight:600;margin-top:2px}
@@ -115,6 +116,7 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
 .ci.expired{background:#FEECEC;color:#C0392B}
 .ci.expiring{background:#FEF3C7;color:#92400E}
 .ci.missing{background:#EEF1FF;color:#3D52D5}
+.ci.heic{background:#F5F0FF;color:#7C3AED;border:1.5px solid #A78BFA}
 .ci .ci-tag{font-size:9px;font-weight:800;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,.06);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 
 /* EMPTY */
@@ -242,6 +244,7 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
     <button class="fb red" id="qf-expired" onclick="qsf('expired')">🔴 Expired</button>
     <button class="fb amber" id="qf-expiring" onclick="qsf('expiring')">⚠️ Expiring Soon</button>
     <button class="fb blue" id="qf-missing" onclick="qsf('missing')">Missing Docs</button>
+    <button class="fb" id="qf-heic" onclick="qsf('heic')" style="border-color:#A78BFA;color:#7C3AED">📱 HEIC Files</button>
   </div>
 
   <div id="queueContent">
@@ -274,7 +277,11 @@ function dy(d) { return d ? Math.round((new Date(d) - T) / 86400000) : null; }
 function credStatus(v) {
   if (!v) return 'missing';
   if (v.na) return 'na';
-  if (v.m || !v.e) return 'missing';
+  if (v.m || !v.e) {
+    // Check if the note indicates HEIC format issue
+    if (v.nt && v.nt.toLowerCase().includes('heic')) return 'heic';
+    return 'missing';
+  }
   const n = dy(v.e);
   if (n < 0) return 'expired';
   if (n <= 30) return 'expiring';
@@ -311,7 +318,7 @@ function collectItems(c) {
   CR.forEach(k => {
     const v = c.data.credentials[k] || {};
     const st = credStatus(v);
-    if (st === 'expired' || st === 'expiring' || st === 'missing') {
+    if (st === 'expired' || st === 'expiring' || st === 'missing' || st === 'heic') {
       items.push({ cred: k, status: st, exp: v.e, days: v.e ? dy(v.e) : null, note: v.nt || '' });
     }
   });
@@ -568,7 +575,8 @@ function render() {
           const itemHtml = [
             ...expiredItems.map(i => `<div class="ci expired"><span class="ci-tag">Expired</span>${i.cred} — ${fmt(i.exp)} (${Math.abs(i.days)}d ago)</div>`),
             ...expiringItems.map(i => `<div class="ci expiring"><span class="ci-tag">Expiring ${i.days}d</span>${i.cred} — ${fmt(i.exp)}</div>`),
-            ...missingItems.map(i => `<div class="ci missing"><span class="ci-tag">Never Uploaded</span>${i.cred}</div>`)
+            ...missingItems.map(i => `<div class="ci missing"><span class="ci-tag">Never Uploaded</span>${i.cred}</div>`),
+            ...items.filter(i => i.status === 'heic').map(i => `<div class="ci heic"><span class="ci-tag">⚠ HEIC File</span>${i.cred} — Re-upload as JPG or PDF</div>`)
           ].join('');
           collectHtml = `<div class="collect-list">
             <div class="cl-hdr">⚡ Items to Collect from This Clinician (${items.length})</div>
@@ -583,10 +591,10 @@ function render() {
             const v = c.data.credentials[k] || {};
             const st = credStatus(v);
             const n = v.e ? dy(v.e) : null;
-            const dt = v.na ? 'N/A — W2' : v.m ? 'Not on file' : v.e ? fmt(v.e) : 'Unreadable';
-            const sub = v.na ? 'Not required' : st === 'missing' ? 'Never uploaded' : st === 'expired' ? Math.abs(n) + 'd ago' : st === 'expiring' ? n + 'd left' : 'Current';
-            const sc2 = st === 'expired' ? '#B91C1C' : st === 'expiring' ? '#92400E' : st === 'missing' ? '#2B3FA0' : v.na ? '#8C90AD' : '#15803D';
-            return `<div class="cc ${v.na ? 'na' : st}"><div class="cn">${k}</div><div class="cd">${dt}</div><div class="cs" style="color:${sc2}">${sub}${v.nt ? ' · ' + v.nt : ''}</div></div>`;
+            const dt = v.na ? 'N/A — W2' : v.m ? 'Not on file' : v.e ? fmt(v.e) : st === 'heic' ? 'HEIC File' : 'Unreadable';
+            const sub = v.na ? 'Not required' : st === 'heic' ? '⚠ Re-upload as JPG or PDF' : st === 'missing' ? 'Never uploaded' : st === 'expired' ? Math.abs(n) + 'd ago' : st === 'expiring' ? n + 'd left' : 'Current';
+            const sc2 = st === 'expired' ? '#B91C1C' : st === 'expiring' ? '#92400E' : st === 'missing' ? '#2B3FA0' : st === 'heic' ? '#7C3AED' : v.na ? '#8C90AD' : '#15803D';
+            return `<div class="cc ${v.na ? 'na' : st}"><div class="cn">${k}</div><div class="cd">${dt}</div><div class="cs" style="color:${sc2}">${sub}${v.nt && st !== 'heic' ? ' · ' + v.nt : ''}</div></div>`;
           }).join('')}</div>
           <div class="det-btns" style="margin-top:10px">
             <button class="dbtn gold" onclick="copySignal(${idx})">📋 Copy Signal Message</button>
@@ -645,11 +653,12 @@ function renderQueue() {
     { key: 'expired', label: '🔴 Expired — Request Immediately', items: allItems.filter(i => i.status === 'expired') },
     { key: 'expiring', label: '⚠️ Expiring Within 30 Days — Request This Week', items: allItems.filter(i => i.status === 'expiring') },
     { key: 'missing', label: 'Missing — Never Uploaded', items: allItems.filter(i => i.status === 'missing') },
+    { key: 'heic', label: '📱 HEIC Format — Must Re-upload as JPG or PDF', items: allItems.filter(i => i.status === 'heic') },
   ].filter(g => g.items.length > 0);
 
-  const urgencyColor = { expired: '#C0392B', expiring: '#D97706', missing: '#3D52D5' };
-  const urgencyLabel = { expired: 'Expired', expiring: 'Expiring', missing: 'Missing' };
-  const urgencyBg = { expired: '#FEECEC', expiring: '#FEF3C7', missing: '#EEF1FF' };
+  const urgencyColor = { expired: '#C0392B', expiring: '#D97706', missing: '#3D52D5', heic: '#7C3AED' };
+  const urgencyLabel = { expired: 'Expired', expiring: 'Expiring', missing: 'Missing', heic: '⚠ HEIC File' };
+  const urgencyBg = { expired: '#FEECEC', expiring: '#FEF3C7', missing: '#EEF1FF', heic: '#F5F0FF' };
 
   let html = `<div class="aq-wrap">
     <div class="aq-hdr">
