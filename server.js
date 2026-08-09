@@ -25,7 +25,7 @@ function getDriveClient() {
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
 const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB per file max
-const MAX_FILES_TO_SEND = 6; // max files sent to Claude
+const MAX_FILES_TO_SEND = 10; // max files sent to Claude
 
 // ── PERSISTENT CACHE ───────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
@@ -174,9 +174,37 @@ app.get('/api/scan/:folderId', async (req, res) => {
     ).map(f => f.name);
 
     const skippedLarge = candidates.filter(f => parseInt(f.size || 0) > MAX_FILE_BYTES).map(f => f.name);
-    const readableFiles = candidates
-      .filter(f => parseInt(f.size || 0) <= MAX_FILE_BYTES)
-      .slice(0, MAX_FILES_TO_SEND);
+    
+    // Priority keywords — files matching these get sent to Claude first
+    const PRIORITY_KEYWORDS = [
+      'license', 'cert', 'cpr', 'bls', 'insurance', 'registration', 'reg',
+      'physical', 'exam', 'tb', 'ppd', 'flu', 'vaccine', 'immunization',
+      'driver', 'dl', 'id ', 'physical', 'clearance', 'liability'
+    ];
+    const SKIP_KEYWORDS_FILE = [
+      'badge', 'photo', 'resume', 'ssn', 'social security', 'voided', 'check',
+      'bgc', 'background', 'onboarding', 'guide', 'handbook', 'w4', 'w-4',
+      'i9', 'i-9', 'direct deposit', 'passport', 'offer letter', 'contract'
+    ];
+
+    const underLimit = candidates.filter(f => parseInt(f.size || 0) <= MAX_FILE_BYTES);
+    
+    // Sort: credential files first, skip/irrelevant files last
+    const prioritized = underLimit.sort((a, b) => {
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      const aSkip = SKIP_KEYWORDS_FILE.some(k => aName.includes(k));
+      const bSkip = SKIP_KEYWORDS_FILE.some(k => bName.includes(k));
+      const aPriority = PRIORITY_KEYWORDS.some(k => aName.includes(k));
+      const bPriority = PRIORITY_KEYWORDS.some(k => bName.includes(k));
+      if (aPriority && !bPriority) return -1;
+      if (!aPriority && bPriority) return 1;
+      if (!aSkip && bSkip) return -1;
+      if (aSkip && !bSkip) return 1;
+      return 0;
+    });
+
+    const readableFiles = prioritized.slice(0, MAX_FILES_TO_SEND);
 
     console.log('Files:', allFiles.length, '| Readable:', readableFiles.length, '| Skipped large:', skippedLarge.length, '| HEIC:', skippedHeic.length);
 
