@@ -167,7 +167,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
       f.mimeType.startsWith('image/') ||
       f.mimeType === 'application/pdf' ||
       f.name.toLowerCase().endsWith('.heic') ||
-      f.mimeType === 'image/heic'
+      (f.mimeType === 'image/heic' || f.mimeType === 'image/heif' || f.mimeType === 'image/heic-sequence' || f.mimeType === 'image/heif-sequence')
     );
 
     const skippedLarge = candidates.filter(f => parseInt(f.size || 0) > MAX_FILE_BYTES).map(f => f.name);
@@ -218,7 +218,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
 
     // Download each file one at a time
     for (const file of readableFiles) {
-      const isHeic = file.name.toLowerCase().endsWith('.heic') || file.mimeType === 'image/heic';
+      const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.mimeType === 'image/heic' || file.mimeType === 'image/heif' || file.mimeType === 'image/heic-sequence' || file.mimeType === 'image/heif-sequence';
       try {
         console.log('Downloading:', file.name, isHeic ? '(HEIC→JPEG)' : '', '(', Math.round(parseInt(file.size||0)/1024), 'KB)');
 
