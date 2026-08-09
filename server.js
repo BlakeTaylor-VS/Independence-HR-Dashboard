@@ -25,7 +25,7 @@ function getDriveClient() {
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
 const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB per file max
-const MAX_FILES_TO_SEND = 15; // max files sent to Claude
+const MAX_FILES_TO_SEND = 20; // max files sent to Claude
 
 // ── PERSISTENT CACHE ───────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
@@ -176,12 +176,15 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const PRIORITY_KEYWORDS = [
       'license', 'cert', 'cpr', 'bls', 'insurance', 'registration', 'reg',
       'physical', 'exam', 'tb', 'ppd', 'flu', 'vaccine', 'immunization',
-      'driver', 'dl', 'clearance', 'liability'
+      'driver', 'dl', 'clearance', 'liability', 'hep', 'hepatitis', 'mmr',
+      'measles', 'resume', 'badge', 'photo', 'headshot', 'varicella', 'varceilla'
     ];
     const SKIP_KEYWORDS_FILE = [
-      'badge', 'photo', 'resume', 'ssn', 'social security', 'voided', 'check',
-      'bgc', 'background', 'onboarding', 'guide', 'handbook', 'w4', 'w-4',
-      'i9', 'i-9', 'direct deposit', 'offer letter', 'contract'
+      'ssn', 'social security', 'voided', 'bgc', 'background',
+      'onboarding', 'guide', 'handbook', 'w4', 'w-4',
+      'i9', 'i-9', 'direct deposit', 'offer letter', 'contract', 'skills',
+      'checklist', 'tdap', 'covid', 'booster',
+      'pediatric', 'competency', 'meet', 'recording', 'transcript'
     ];
 
     const underLimit = candidates.filter(f => parseInt(f.size || 0) <= MAX_FILE_BYTES);
@@ -278,7 +281,7 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     msgContent.push({
       type: 'text',
-      text: 'Today: ' + today + '. You are reviewing HR documents for a home health therapy clinician. Extract expiration dates for these 9 credentials: Prof License, Driver License, Car Reg, Car Insurance, CPR, Liability Ins, Physical Exam, TB Clearance, Flu Vaccine.\n\nIMPORTANT RULES:\n- Documents may be photos of physical cards/papers — read them carefully regardless of image quality\n- Use the FILENAME as a strong hint for which credential each file contains\n- Prof License: look for license expiration on state therapy license (PT, PTA, OT, COTA, SLP)\n- Driver License: expiration date printed on the ID card\n- Car Reg: registration valid through date (DMV card)\n- Car Insurance: policy expiration date\n- CPR: card expiration or course completion date (expires 2 years from issue)\n- Liability Ins: malpractice/professional liability policy expiration (N/A for W2 employees)\n- Physical Exam: use exam/visit date + 1 year as expiration\n- TB Clearance: use test date + 1 year, or read clearance expiration directly\n- Flu Vaccine: expires Oct 1 of the following flu season year\n- W2 employees: set Liability Ins to na:true\n- If a document EXISTS but date is unclear: set e:null, m:false, explain briefly in nt\n- Only set m:true if NO document exists for that credential\n\nReturn ONLY this JSON, no other text:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""}}}'
+      text: 'Today: ' + today + '. You are reviewing HR documents for a home health therapy clinician. Extract credential information for these 13 items.\n\nCREDENTIALS WITH EXPIRATION DATES:\n- Prof License: state therapy license expiration (PT, PTA, OT, COTA, SLP)\n- Driver License: expiration date on the ID card\n- Car Reg: registration valid-through date (DMV card)\n- Car Insurance: policy expiration date\n- CPR: card expiration or completion date + 2 years\n- Liability Ins: malpractice/professional liability expiration (N/A for W2 employees — set na:true)\n- Physical Exam: exam/visit date + 1 year = expiration\n- TB Clearance: test date + 1 year, or read expiration directly\n- Flu Vaccine: expires Oct 1 of the following flu season year\n\nPRESENCE-ONLY CREDENTIALS (no expiration — just confirm document exists):\n- Hep B Vaccine: proof of Hepatitis B vaccination series or titer. Set e:null always. Set m:false if ANY immunization record, vaccine record, or shot record showing Hep B is present.\n- MMR Vaccine: proof of MMR/Measles vaccination or titer. Set e:null always. Set m:false if ANY immunization record showing MMR/Measles is present. Varicella records may be in the same document.\n- Resume: any resume or CV document. Set e:null, m:false if present.\n- Badge Photo: any headshot, badge photo, or profile photo. Set e:null, m:false if present.\n\nIMPORTANT RULES:\n- Documents may be photos or PDFs — read carefully regardless of image quality\n- Use the FILENAME as a strong hint for which credential each file contains\n- A single immunization record PDF may satisfy Hep B, MMR, and Flu Vaccine simultaneously — check carefully\n- If a document EXISTS but date is unclear: set e:null, m:false, note briefly in nt\n- Only set m:true if NO document exists for that credential\n- W2 employees: set Liability Ins na:true\n\nReturn ONLY this JSON, no other text:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Hep B Vaccine":{"e":null,"m":false,"na":false,"nt":""},"MMR Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Resume":{"e":null,"m":false,"na":false,"nt":""},"Badge Photo":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
     console.log('Calling Claude with', readableFiles.length, 'files...');
