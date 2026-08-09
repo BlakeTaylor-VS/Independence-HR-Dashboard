@@ -452,8 +452,7 @@ async function scanOne(idx) {
   } catch (e) {
     roster[idx].scanning = false;
     roster[idx].scanned = false;
-    console.error('Scan error:', c.displayName, e.message);
-    throw e; // let scanAll handle logging and toast
+    throw e;
   }
 }
 
@@ -479,7 +478,7 @@ async function scanAll() {
     document.getElementById('pLbl').textContent = '✓ All up to date — no new uploads detected';
     btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
     toast('No changes — ' + skipped + ' clinicians already current');
-    logAction('Refresh All — no changes detected, ' + skipped + ' clinicians up to date', 'system');
+    logAction('Refresh All — no changes, ' + skipped + ' up to date', 'system');
     setTimeout(() => p.classList.remove('show'), 5000);
     return;
   }
@@ -490,48 +489,30 @@ async function scanAll() {
   for (let i = 0; i < toScan.length; i++) {
     const c = toScan[i];
     const idx = roster.indexOf(c);
-    const oldData = c.data ? { credentials: Object.assign({}, c.data.credentials) } : null;
-
-    // Update progress bar and label
     document.getElementById('pFill').style.width = Math.round(i / toScan.length * 100) + '%';
-    document.getElementById('pLbl').textContent = 'Scanning ' + c.displayName.split(' ')[0] + '... (' + (i + 1) + '/' + toScan.length + ')';
-
-    // Mark as scanning in UI
-    roster[idx].scanning = true;
-    updateRow(idx);
-
+    document.getElementById('pLbl').textContent = 'Scanning ' + c.displayName.split(' ')[0] + '... (' + (i+1) + '/' + toScan.length + ')';
     try {
       await scanOne(idx);
       done++;
-      // Log result
       const items = collectItems(roster[idx]);
-      if (items.length === 0) {
-        logAction('Scanned: ' + c.displayName + ' — All credentials current', 'good', 'Compliant');
-      } else {
-        logAction('Scanned: ' + c.displayName + ' — ' + items.length + ' item(s) need attention', 'info', items.length + ' items');
-      }
-      // Detect credential changes
-      if (oldData) detectChanges(roster[idx], oldData, roster[idx].data);
+      logAction('Scanned: ' + c.displayName + ' — ' + (items.length === 0 ? 'All credentials current' : items.length + ' item(s) need attention'), items.length === 0 ? 'good' : 'info', items.length === 0 ? 'Compliant' : items.length + ' items');
     } catch (e) {
       errors++;
       logAction('Scan error: ' + c.displayName + ' — ' + e.message, 'bad', 'Error');
+      toast('Scan error: ' + c.displayName);
     }
-
-    // Update just this row in the UI
-    updateRow(idx);
     updateKPIs();
+    render();
   }
 
   document.getElementById('pFill').style.width = '100%';
   document.getElementById('pLbl').textContent = '✓ ' + done + ' scanned · ' + skipped + ' unchanged' + (errors ? ' · ' + errors + ' errors' : '');
   btn.disabled = false; btn.innerHTML = '&#8635; Refresh All';
-  toast('Done — ' + done + ' updated, ' + skipped + ' unchanged' + (errors ? ', ' + errors + ' errors' : ''));
-  logAction('Refresh All complete — ' + done + ' scanned, ' + skipped + ' unchanged' + (errors ? ', ' + errors + ' errors' : ''), 'system');
-  render(); // one full render at the very end
+  toast('Done — ' + done + ' updated, ' + skipped + ' unchanged');
+  logAction('Refresh All complete — ' + done + ' scanned, ' + skipped + ' unchanged', 'system');
   setTimeout(() => p.classList.remove('show'), 5000);
 }
 
-// ── UPDATE SINGLE ROW (lightweight, no full re-render) ─────────
 function updateRow(idx) {
   const c = roster[idx];
   const rs = rowStatus(c);
