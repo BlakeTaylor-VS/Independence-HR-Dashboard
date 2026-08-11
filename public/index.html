@@ -822,7 +822,9 @@ function logAction(text, type, badge) {
 function renderLog() {
   const wrap = document.getElementById('logWrap');
   const empty = document.getElementById('logEmpty');
-  document.getElementById('logSub').textContent =
+  const logSub = document.getElementById('logSub');
+  if (!wrap || !empty || !logSub) return; // elements not in DOM yet
+  logSub.textContent =
     activityLog.length + ' actions logged today — ' + new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   if (!activityLog.length) { empty.style.display = 'block'; return; }
   empty.style.display = 'none';
