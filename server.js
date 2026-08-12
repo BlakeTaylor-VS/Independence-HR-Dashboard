@@ -24,8 +24,8 @@ function getDriveClient() {
 
 const MASTER_FOLDER_ID = '1IWKAcsV53-zm7MQvVWJaqQBAiSeM_be1';
 const SKIP_KEYWORDS = ['old employee', 'archive', 'template', 'test', 'contract', 'adp', 'competenc'];
-const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4MB per file max
-const MAX_FILES_TO_SEND = 20; // max files sent to Claude
+const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2MB per file max
+const MAX_FILES_TO_SEND = 12; // max files sent to Claude
 
 // ── PERSISTENT CACHE ───────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '.cache');
