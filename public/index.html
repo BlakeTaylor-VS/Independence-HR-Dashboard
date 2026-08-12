@@ -544,6 +544,7 @@ function updateRow(idx) {
 // Manual scan from UI button (shows toast on error)
 async function scanOneManual(idx) {
   const c = roster[idx];
+  if (!c) { console.error('scanOneManual: no clinician at idx', idx); toast('Error: clinician not found'); return; }
   roster[idx].scanning = true;
   render();
   try {
