@@ -165,6 +165,16 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
 .log-legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:10px;font-weight:600;color:#8C90AD;align-items:center}
 .leg{display:flex;align-items:center;gap:4px}
 .leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.pct-card{background:#fff;border:1px solid #E2E4F0;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:18px}
+.pct-num{font-size:30px;font-weight:800;min-width:92px;line-height:1}
+.pct-lbl{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#8C90AD;margin-top:4px}
+.pct-bar{flex:1}
+.pct-track{height:12px;background:#EEEEF5;border-radius:6px;overflow:hidden}
+.pct-fill{height:100%;border-radius:6px;transition:width .4s}
+.pct-sub{font-size:11px;color:#5A5F7D;font-weight:600;margin-top:6px}
+.bonb{background:#F1F2F7;color:#5A5F7D;border:1px dashed #B8BCD4}
+.dr.onb td{opacity:.75}
+.fb.onbf.on{background:#5A5F7D;border-color:#5A5F7D;color:#fff}
 .scan-btn{background:#F0A500;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.3px}
 .scan-btn:disabled{opacity:.5;cursor:not-allowed}
 .scan-btn:hover:not(:disabled){background:#d4900a}
@@ -197,12 +207,20 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
     </div>
   </div>
 
+  <div class="pct-card" id="pctCard">
+    <div><div class="pct-num" id="pctNum">—</div><div class="pct-lbl">IHRD Complete</div></div>
+    <div class="pct-bar">
+      <div class="pct-track"><div class="pct-fill" id="pctFill" style="width:0%"></div></div>
+      <div class="pct-sub" id="pctSub">Calculating...</div>
+    </div>
+  </div>
+
   <div class="kstrip">
     <div class="kc red"><div class="kn" id="kE">—</div><div class="kl">Expired</div></div>
     <div class="kc amber"><div class="kn" id="kS">—</div><div class="kl">Expiring ≤30d</div></div>
     <div class="kc blue"><div class="kn" id="kM">—</div><div class="kl">Missing</div></div>
     <div class="kc green"><div class="kn" id="kC">—</div><div class="kl">Compliant</div></div>
-    <div class="kc gray"><div class="kn" id="kN">—</div><div class="kl">Total Clinicians</div></div>
+    <div class="kc gray"><div class="kn" id="kN">—</div><div class="kl" id="kNl">Active Clinicians</div></div>
     <div class="kc gray"><div class="kn" id="kQ">—</div><div class="kl">Items to Collect</div></div>
   </div>
 
@@ -222,6 +240,7 @@ nav{background:#2B3FA0;height:48px;display:flex;align-items:center;padding:0 24p
     <button class="fb blue" id="f-missing" onclick="sf('missing')">Missing Docs</button>
     <button class="fb green" id="f-ok" onclick="sf('ok')">✅ Compliant</button>
     <button class="fb" id="f-pending" onclick="sf('pending')">Not Scanned</button>
+    <button class="fb onbf" id="f-onb" onclick="sf('onb')">⏸ Onboarding</button>
   </div>
 
   <div class="tw">
@@ -404,6 +423,23 @@ function qsf(f) {
   renderQueue();
 }
 
+// Only Active clinicians count toward KPIs, the Action Queue, Refresh All and % Complete
+function act() { return roster.filter(c => c.active); }
+
+async function setActive(idx, active) {
+  const c = roster[idx];
+  if (!c) return;
+  if (!active && !confirm('Move ' + c.displayName + ' to Onboarding?\n\nThey will be skipped by Refresh All and left out of the Action Queue and % Complete until you activate them.')) return;
+  try {
+    const r = await fetch('/api/status/' + c.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    c.active = active;
+    logAction((active ? 'Activated: ' : 'Moved to Onboarding: ') + c.displayName, active ? 'good' : 'system', active ? '▶ Active' : '⏸ Onboarding');
+    toast(active ? (c.displayName + ' is now Active' + (c.scanned ? '' : ' — click ⚡ Scan to load credentials')) : (c.displayName + ' moved to Onboarding'));
+    updateKPIs(); render();
+  } catch (e) { toast('Could not update status: ' + e.message); }
+}
+
 // ── LOAD ROSTER ───────────────────────────────────────────────
 async function loadRoster() {
   try {
@@ -412,7 +448,7 @@ async function loadRoster() {
     if (json.error) throw new Error(json.error);
     roster = (json.clinicians || []).map(f => {
       const p = parseName(f.name);
-      const c = { id: f.id, folderName: f.name, ...p, scanned: false, scanning: false, data: null };
+      const c = { id: f.id, folderName: f.name, ...p, scanned: false, scanning: false, data: null, active: f.active !== false };
       if (f.cachedData && f.cachedData.credentials) {
         c.data = f.cachedData;
         c.scanned = true;
@@ -421,10 +457,6 @@ async function loadRoster() {
       }
       return c;
     }).sort((a, b) => a.displayName.localeCompare(b.displayName));
-    const sc = roster.filter(c => c.scanned).length;
-    document.getElementById('kN').textContent = roster.length;
-    document.getElementById('pageSub').textContent =
-      roster.length + ' clinicians · ' + sc + ' scanned · ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     updateKPIs();
     render();
   } catch (e) {
@@ -437,6 +469,7 @@ async function loadRoster() {
 async function scanOne(idx) {
   const c = roster[idx];
   if (!c || c.scanning) return;
+  const oldData = c.data;
   roster[idx].scanning = true;
   roster[idx].scanned = false;
   try {
@@ -449,9 +482,12 @@ async function scanOne(idx) {
     roster[idx].scanning = false;
     if (data.employmentType === 'W2') roster[idx].emp = 'W2';
     else if (data.employmentType === '1099') roster[idx].emp = '1099';
+    try { detectChanges(roster[idx], oldData, data); } catch (dcErr) { console.log('detectChanges error:', dcErr.message); }
   } catch (e) {
     roster[idx].scanning = false;
-    roster[idx].scanned = false;
+    // Keep the previous results on screen if a re-scan fails
+    if (oldData) { roster[idx].data = oldData; roster[idx].scanned = true; }
+    else roster[idx].scanned = false;
     throw e;
   }
 }
@@ -461,9 +497,10 @@ async function scanAll() {
   const btn = document.getElementById('scanBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spin">⏳</span> Checking...';
   const p = document.getElementById('prog'); p.classList.add('show');
-  logAction('Refresh All started — checking ' + roster.length + ' clinicians', 'system');
+  const activeList = act();
+  logAction('Refresh All started — checking ' + activeList.length + ' active clinicians (onboarding skipped)', 'system');
 
-  const checks = await Promise.all(roster.map(async c => {
+  const checks = await Promise.all(activeList.map(async c => {
     try {
       const r = await fetch('/api/check/' + c.id);
       const j = await r.json();
@@ -471,7 +508,7 @@ async function scanAll() {
     } catch { return { c, hasChanges: !c.scanned }; }
   }));
   const toScan = checks.filter(x => x.hasChanges).map(x => x.c);
-  const skipped = roster.length - toScan.length;
+  const skipped = activeList.length - toScan.length;
 
   if (!toScan.length) {
     document.getElementById('pFill').style.width = '100%';
@@ -545,11 +582,14 @@ function updateRow(idx) {
 async function scanOneManual(idx) {
   const c = roster[idx];
   if (!c) { console.error('scanOneManual: no clinician at idx', idx); toast('Error: clinician not found'); return; }
-  roster[idx].scanning = true;
-  render();
+  if (c.scanning) { toast('Already scanning ' + c.displayName); return; }
+  toast('Scanning ' + c.displayName + '... (about 30–60 sec)');
   try {
-    await scanOne(idx);
+    const p = scanOne(idx); // sets scanning=true immediately
+    render();               // show the spinner
+    await p;
     const items = collectItems(roster[idx]);
+    toast('✓ Re-scan complete: ' + c.displayName);
     logAction('Scanned: ' + c.displayName + ' — ' + (items.length === 0 ? 'All credentials current' : items.length + ' item(s) need attention'), items.length === 0 ? 'good' : 'info', items.length === 0 ? 'Compliant' : items.length + ' items');
   } catch(e) {
     logAction('Scan error: ' + c.displayName + ' — ' + e.message, 'bad', 'Error');
@@ -560,7 +600,16 @@ async function scanOneManual(idx) {
 }
 function updateKPIs() {
   let e = 0, s = 0, m = 0, ok = 0, totalCollect = 0;
-  roster.forEach(c => {
+  const A = act();
+  const onb = roster.length - A.length;
+  const scannedA = A.filter(c => c.scanned).length;
+  document.getElementById('kN').textContent = A.length;
+  document.getElementById('kNl').textContent = 'Active Clinicians' + (onb ? ' (+' + onb + ' onb.)' : '');
+  document.getElementById('f-onb').textContent = '⏸ Onboarding (' + onb + ')';
+  document.getElementById('pageSub').textContent =
+    A.length + ' active · ' + onb + ' onboarding · ' + scannedA + ' scanned · ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  updatePct(A);
+  A.forEach(c => {
     if (!c.scanned || !c.data || !c.data.credentials) return;
     CR.forEach(k => {
       const st = credStatus(c.data.credentials[k], k);
@@ -576,6 +625,36 @@ function updateKPIs() {
   document.getElementById('kM').textContent = m || '—';
   document.getElementById('kC').textContent = ok || '—';
   document.getElementById('kQ').textContent = totalCollect || '—';
+}
+
+// ── % IHRD COMPLETE ───────────────────────────────────────────
+// Credential-level: every required credential for every ACTIVE clinician.
+// Counts as complete: Current, Expiring soon (still valid today), On File.
+// Not complete: Expired, Missing, HEIC, unreadable. N/A items are left out.
+// Active clinicians not yet scanned count as 13 incomplete items.
+function updatePct(A) {
+  let done = 0, need = 0, fully = 0, unscanned = 0;
+  A.forEach(c => {
+    if (!c.scanned || !c.data || !c.data.credentials) { need += CR.length; unscanned++; return; }
+    let allGood = true;
+    CR.forEach(k => {
+      const st = credStatus(c.data.credentials[k], k);
+      if (st === 'na') return;
+      need++;
+      if (st === 'current' || st === 'expiring') done++; else allGood = false;
+    });
+    if (allGood) fully++;
+  });
+  const pct = need ? (done / need * 100) : 0;
+  const color = pct >= 95 ? '#15803D' : pct >= 80 ? '#D97706' : '#C0392B';
+  const num = document.getElementById('pctNum');
+  num.textContent = need ? pct.toFixed(1) + '%' : '—';
+  num.style.color = color;
+  const fill = document.getElementById('pctFill');
+  fill.style.width = pct.toFixed(1) + '%'; fill.style.background = color;
+  document.getElementById('pctSub').textContent =
+    done + ' of ' + need + ' required credentials on file and valid · ' + fully + ' of ' + A.length + ' active clinicians fully up to date' +
+    (unscanned ? ' · ' + unscanned + ' active not yet scanned' : '');
 }
 
 // ── COPY SIGNAL ───────────────────────────────────────────────
@@ -612,7 +691,7 @@ function copySignal(idx) {
 }
 
 function copyAllSignals() {
-  const scanned = roster.filter(c => c.scanned && collectItems(c).length > 0);
+  const scanned = act().filter(c => c.scanned && collectItems(c).length > 0);
   if (!scanned.length) { toast('No action items found'); return; }
   const parts = scanned.map(c => {
     const items = collectItems(c);
@@ -631,6 +710,9 @@ function copyAllSignals() {
 function render() {
   const q = document.getElementById('srch').value.toLowerCase();
   let fd = roster.filter(c => (c.displayName || c.folderName).toLowerCase().includes(q));
+  // Onboarding clinicians only show under the Onboarding filter (or when searching by name)
+  if (af === 'onb') fd = fd.filter(c => !c.active);
+  else if (!(q && af === 'all')) fd = fd.filter(c => c.active);
   if (af === 'expired') fd = fd.filter(c => rowStatus(c) === 'expired');
   else if (af === 'soon') fd = fd.filter(c => rowStatus(c) === 'expiring');
   else if (af === 'missing') fd = fd.filter(c => ['missing', 'expired', 'expiring'].includes(rowStatus(c)) && rowStatus(c) !== 'ok');
@@ -646,6 +728,7 @@ function render() {
     const rs = rowStatus(c);
     let badge = '';
     if (c.scanning) badge = '<span class="badge bscn"><span class="spin">⏳</span> Scanning...</span>';
+    else if (!c.active) badge = '<span class="badge bonb">⏸ Onboarding</span>';
     else if (!c.scanned) badge = '<span class="badge bpend">⏳ Not Scanned</span>';
     else if (rs === 'expired') badge = '<span class="badge bexp">🔴 Expired</span>';
     else if (rs === 'expiring') badge = '<span class="badge bsoon">⚠️ Expiring</span>';
@@ -657,11 +740,13 @@ function render() {
     const w = worstDays(c);
     const wt = w === null ? '—' : w < 0 ? Math.abs(w) + 'd ago' : w + 'd';
     const wc = w !== null && w < 0 ? '#C0392B' : w !== null && w <= 30 ? '#D97706' : '#8C90AD';
-    const action = c.scanned
+    const action = !c.active
+      ? `<button class="dbtn blue" onclick="setActive(${idx}, true)" title="Start tracking this clinician in IHRD">▶ Activate</button>`
+      : c.scanned
       ? `<div style="display:flex;gap:5px"><button class="dbtn gold" onclick="copySignal(${idx})">📋 Signal</button><button class="dbtn blue" onclick="copyDriveLink(${idx})" title="Copy HR folder link">📁</button></div>`
       : `<button class="dbtn blue" onclick="scanOneManual(${idx})" ${c.scanning ? 'disabled' : ''}>⚡ Scan</button>`;
 
-    let rows = `<tr class="dr" data-idx="${idx}">
+    let rows = `<tr class="dr${c.active ? '' : ' onb'}" data-idx="${idx}">
       <td><button class="rb" onclick="expanded[${idx}]=!expanded[${idx}];render()">${expanded[idx] ? '▲' : '▼'}</button></td>
       <td><div style="font-weight:700">${c.displayName}</div><div style="font-size:10px;color:#8C90AD;font-weight:600">${c.cred || ''}</div></td>
       <td>${tp}</td><td>${badge}</td>
@@ -674,7 +759,8 @@ function render() {
 
     if (expanded[idx]) {
       if (!c.scanned || !c.data || !c.data.credentials) {
-        rows += `<tr class="xrow"><td colspan="9"><div class="det" style="color:#8C90AD">Not yet scanned. Click ⚡ Scan to load credential data.</div></td></tr>`;
+        rows += `<tr class="xrow"><td colspan="9"><div class="det" style="color:#8C90AD">${c.active ? 'Not yet scanned. Click ⚡ Scan to load credential data.' : 'Onboarding — not tracked yet. Click ▶ Activate when this clinician is ready to see patients.'}
+          ${c.active ? `<div class="det-btns" style="margin-top:10px"><button class="dbtn" onclick="setActive(${idx}, false)">⏸ Move to Onboarding</button></div>` : ''}</div></td></tr>`;
       } else {
         const items = collectItems(c);
         const missing = CR.filter(k => credStatus(c.data.credentials[k], k) === 'missing');
@@ -713,7 +799,10 @@ function render() {
             <button class="dbtn gold" onclick="copySignal(${idx})">📋 Copy Signal Message</button>
             <button class="dbtn blue" onclick="openDriveFolder(${idx})">📁 Open HR Folder</button>
             <button class="dbtn blue" onclick="copyDriveLink(${idx})">🔗 Copy Folder Link</button>
-            <button class="dbtn" onclick="scanOne(${idx})">🔄 Re-scan</button>
+            <button class="dbtn" onclick="scanOneManual(${idx})">🔄 Re-scan</button>
+            ${c.active
+              ? `<button class="dbtn" onclick="setActive(${idx}, false)" style="margin-left:auto">⏸ Move to Onboarding</button>`
+              : `<button class="dbtn blue" onclick="setActive(${idx}, true)" style="margin-left:auto">▶ Activate</button>`}
           </div>
         </div></td></tr>`;
       }
@@ -728,7 +817,7 @@ function renderQueue() {
 
   // Build flat list of all action items across all scanned clinicians
   let allItems = [];
-  roster.forEach(c => {
+  act().forEach(c => {
     if (!c.scanned) return;
     const items = collectItems(c);
     items.forEach(i => allItems.push({ ...i, clinician: c }));
@@ -740,7 +829,7 @@ function renderQueue() {
   else if (qaf === 'missing') allItems = allItems.filter(i => i.status === 'missing');
 
   if (!allItems.length) {
-    const scannedCount = roster.filter(c => c.scanned).length;
+    const scannedCount = act().filter(c => c.scanned).length;
     if (scannedCount === 0) {
       container.innerHTML = '<div class="aq-empty">No clinicians scanned yet. Go to the Roster tab and click <strong>Refresh All</strong> to scan credentials.</div>';
     } else {
@@ -751,7 +840,7 @@ function renderQueue() {
   }
 
   document.getElementById('queueSub').textContent =
-    roster.filter(c => c.scanned).length + ' clinicians scanned · ' + allItems.length + ' items to collect';
+    act().filter(c => c.scanned).length + ' active clinicians scanned · ' + allItems.length + ' items to collect';
 
   // Sort: expired first (most overdue), then expiring (soonest), then missing
   const order = { expired: 0, expiring: 1, missing: 2 };
