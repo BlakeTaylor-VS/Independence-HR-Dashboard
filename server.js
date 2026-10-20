@@ -45,7 +45,44 @@ function saveCache(cache) {
 }
 
 let scanCache = loadCache();
+
+// ── ACTIVE / ONBOARDING STATUS (saved on the Render disk) ──────
+// { folderId: { active: true|false, changedAt } }
+// Clinicians with no saved choice: Active if they've been scanned before, Onboarding if not.
+const STATUS_FILE = path.join(DATA_DIR, 'ihrd_status.json');
+let statusMap = {};
+try { if (fs.existsSync(STATUS_FILE)) statusMap = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')); }
+catch (e) { console.error('Status load error:', e.message); }
+function saveStatus() {
+  try { fs.writeFileSync(STATUS_FILE, JSON.stringify(statusMap), 'utf8'); }
+  catch (e) { console.error('Status save error:', e.message); }
+}
+function isActive(folderId) {
+  if (statusMap[folderId]) return !!statusMap[folderId].active;
+  return !!scanCache[folderId];
+}
 console.log('Loaded cache with', Object.keys(scanCache).length, 'entries');
+
+// ── ONE-TIME FIX: chest X-ray TB clearance is valid 5 years, not 1 ──
+// Corrects results already saved, so nobody needs to be re-scanned.
+// Each record is corrected only once (marked xrayFixed).
+(function fixXrayTB() {
+  let fixed = 0;
+  for (const id of Object.keys(scanCache)) {
+    const tb = scanCache[id]?.data?.credentials?.['TB Clearance'];
+    if (!tb || !tb.e || tb.xrayFixed) continue;
+    if (!/x-?ray|cxr|chest/i.test(tb.nt || '')) continue;
+    const d = new Date(tb.e + 'T00:00:00Z');
+    if (isNaN(d)) continue;
+    d.setUTCFullYear(d.getUTCFullYear() + 4); // was test date + 1 yr → now + 5 yrs
+    tb.e = d.toISOString().split('T')[0];
+    tb.nt = (tb.nt || '') + ' [Corrected: chest X-ray valid 5 years]';
+    tb.xrayFixed = true;
+    fixed++;
+  }
+  if (fixed) { saveCache(scanCache); }
+  console.log('TB X-ray correction: updated', fixed, 'clinician(s)');
+})();
 console.log('ENV CHECK - GOOGLE_CLIENT_EMAIL present:', !!process.env.GOOGLE_CLIENT_EMAIL);
 console.log('ENV CHECK - GOOGLE_PRIVATE_KEY present:', !!process.env.GOOGLE_PRIVATE_KEY);
 console.log('ENV CHECK - ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
@@ -74,6 +111,7 @@ app.get('/api/clinicians', async (req, res) => {
         name: f.name,
         cachedData: scanCache[f.id] ? scanCache[f.id].data : null,
         lastScanned: scanCache[f.id] ? scanCache[f.id].scannedAt : null,
+        active: isActive(f.id),
       }));
 
     res.json({ clinicians });
@@ -81,6 +119,16 @@ app.get('/api/clinicians', async (req, res) => {
     console.error('Clinicians error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── SET ACTIVE / ONBOARDING ────────────────────────────────────
+app.post('/api/status/:folderId', (req, res) => {
+  const { folderId } = req.params;
+  const active = !!(req.body && req.body.active);
+  statusMap[folderId] = { active, changedAt: Date.now() };
+  saveStatus();
+  console.log('Status change:', folderId, active ? 'ACTIVE' : 'ONBOARDING');
+  res.json({ ok: true, active });
 });
 
 // ── CHECK IF FOLDER HAS NEW FILES SINCE LAST SCAN ─────────────
@@ -281,13 +329,13 @@ app.get('/api/scan/:folderId', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     msgContent.push({
       type: 'text',
-      text: 'Today: ' + today + '. You are reviewing HR documents for a home health therapy clinician. Extract credential information for these 13 items.\n\nCREDENTIALS WITH EXPIRATION DATES:\n- Prof License: state therapy license expiration (PT, PTA, OT, COTA, SLP)\n- Driver License: expiration date on the ID card\n- Car Reg: registration valid-through date (DMV card)\n- Car Insurance: policy expiration date\n- CPR: card expiration or completion date + 2 years\n- Liability Ins: malpractice/professional liability expiration (N/A for W2 employees — set na:true)\n- Physical Exam: exam/visit date + 1 year = expiration\n- TB Clearance: test date + 1 year, or read expiration directly\n- Flu Vaccine: expires Oct 1 of the following flu season year\n\nPRESENCE-ONLY CREDENTIALS (no expiration — just confirm document exists):\n- Hep B Vaccine: proof of Hepatitis B vaccination series or titer. Set e:null always. Set m:false if ANY immunization record, vaccine record, or shot record showing Hep B is present.\n- MMR Vaccine: proof of MMR/Measles vaccination or titer. Set e:null always. Set m:false if ANY immunization record showing MMR/Measles is present. Varicella records may be in the same document.\n- Resume: any resume or CV document. Set e:null, m:false if present.\n- Badge Photo: any headshot, badge photo, or profile photo. Set e:null, m:false if present.\n\nIMPORTANT RULES:\n- Documents may be photos or PDFs — read carefully regardless of image quality\n- Use the FILENAME as a strong hint for which credential each file contains\n- A single immunization record PDF may satisfy Hep B, MMR, and Flu Vaccine simultaneously — check carefully\n- If a document EXISTS but date is unclear: set e:null, m:false, note briefly in nt\n- Only set m:true if NO document exists for that credential\n- W2 employees: set Liability Ins na:true\n\nReturn ONLY this JSON, no other text:\n{"employmentType":"W2","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Hep B Vaccine":{"e":null,"m":false,"na":false,"nt":""},"MMR Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Resume":{"e":null,"m":false,"na":false,"nt":""},"Badge Photo":{"e":null,"m":false,"na":false,"nt":""}}}'
+      text: 'Today: ' + today + '. You are reviewing HR documents for a home health therapy clinician. Extract credential information for these 13 items.\n\nCREDENTIALS WITH EXPIRATION DATES:\n- Prof License: state therapy license expiration (PT, PTA, OT, COTA, SLP)\n- Driver License: expiration date on the ID card\n- Car Reg: registration valid-through date (DMV card)\n- Car Insurance: policy expiration date\n- CPR: card expiration or completion date + 2 years\n- Liability Ins: malpractice/professional liability expiration (N/A for W2 employees — set na:true)\n- Physical Exam: exam/visit date + 1 year = expiration\n- TB Clearance: if the document is a CHEST X-RAY, expiration = X-ray date + 5 years. If it is a skin test (TST/PPD) or blood test (QuantiFERON/IGRA), expiration = test date + 1 year. Always state in nt which type it is (e.g. \"Chest X-ray 4/11/2025\").\n- Flu Vaccine: expires Oct 1 of the following flu season year\n\nPRESENCE-ONLY CREDENTIALS (no expiration — just confirm document exists):\n- Hep B Vaccine: proof of Hepatitis B vaccination series or titer. Set e:null always. Set m:false if ANY immunization record, vaccine record, or shot record showing Hep B is present.\n- MMR Vaccine: proof of MMR/Measles vaccination or titer. Set e:null always. Set m:false if ANY immunization record showing MMR/Measles is present. Varicella records may be in the same document.\n- Resume: any resume or CV document. Set e:null, m:false if present.\n- Badge Photo: any headshot, badge photo, or profile photo. Set e:null, m:false if present.\n\nIMPORTANT RULES:\n- Documents may be photos or PDFs — read carefully regardless of image quality\n- Use the FILENAME as a strong hint for which credential each file contains\n- A single immunization record PDF may satisfy Hep B, MMR, and Flu Vaccine simultaneously — check carefully\n- If a document EXISTS but date is unclear: set e:null, m:false, note briefly in nt\n- Only set m:true if NO document exists for that credential\n- W2 employees: set Liability Ins na:true\n\nEMPLOYMENT TYPE: Set employmentType to "1099" if there is ANY liability/malpractice insurance certificate (e.g. ACORD, HPSO, CM&F) or 1099/W-9/independent contractor document; otherwise "W2". If a liability insurance certificate exists, ALWAYS record its expiration in Liability Ins with na:false — never mark it N/A when a certificate is on file.\n\nReturn ONLY this JSON (employmentType is either "1099" or "W2"), no other text:\n{"employmentType":"1099","credentials":{"Prof License":{"e":"2027-01-01","m":false,"na":false,"nt":""},"Driver License":{"e":null,"m":false,"na":false,"nt":""},"Car Reg":{"e":null,"m":false,"na":false,"nt":""},"Car Insurance":{"e":null,"m":false,"na":false,"nt":""},"CPR":{"e":null,"m":false,"na":false,"nt":""},"Liability Ins":{"e":null,"m":false,"na":false,"nt":""},"Physical Exam":{"e":null,"m":false,"na":false,"nt":""},"TB Clearance":{"e":null,"m":false,"na":false,"nt":""},"Flu Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Hep B Vaccine":{"e":null,"m":false,"na":false,"nt":""},"MMR Vaccine":{"e":null,"m":false,"na":false,"nt":""},"Resume":{"e":null,"m":false,"na":false,"nt":""},"Badge Photo":{"e":null,"m":false,"na":false,"nt":""}}}'
     });
 
     console.log('Calling Claude with', readableFiles.length, 'files...');
     const aiRes = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1200,
+      max_tokens: 2500,
       system: 'You are a JSON-only credential extraction API for a healthcare staffing company. Your job is to read HR documents — which may be photos, scanned images, or PDFs — and extract expiration dates. RULES: (1) Always respond with ONLY a valid JSON object, nothing else — no explanations, no markdown, no preamble. Start with { end with }. (2) Make your BEST GUESS from whatever is visible. If a document is a photo of a license, read the expiration date from the card even if the image quality is imperfect. (3) Only set m:true if there is truly NO document present for that credential at all. If a document exists but you cannot read the date clearly, set e:null and put a brief note in nt — do NOT set m:true. (4) For image files, look carefully at all text including small print, watermarks, and corners where expiration dates typically appear. (5) Use the filename as a strong hint — a file named "DriverLicense" contains the driver license credential. (6) If you can see a date anywhere on the document, use it. Partial dates are better than nothing.',
       messages: [{ role: 'user', content: msgContent }],
     });
@@ -312,6 +360,8 @@ app.get('/api/scan/:folderId', async (req, res) => {
       throw new Error('AI response was not valid JSON even after extraction: ' + parseErr.message);
     }
     parsed.scanned = true;
+    // New scans already apply the 5-year X-ray rule — don't let the startup fix add 4 more years
+    if (parsed.credentials && parsed.credentials['TB Clearance']) parsed.credentials['TB Clearance'].xrayFixed = true;
 
     scanCache[folderId] = { scannedAt: Date.now(), driveModifiedAt: latestModified, data: parsed };
     saveCache(scanCache);
