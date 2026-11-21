@@ -7,6 +7,11 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
+
+// IAD-only access: must stay ABOVE every other app.use / route / express.static
+app.set('trust proxy', 1);
+app.use(require('./iad-guard')());
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
